@@ -72,3 +72,11 @@ class ProjectRepository:
             )
         )
         return result.scalar_one_or_none()
+
+    async def list_members(self, project_id: uuid.UUID) -> list[ProjectMember]:
+        result = await self._session.execute(
+            select(ProjectMember)
+            .where(ProjectMember.project_id == project_id)
+            .order_by(ProjectMember.created_at.asc())
+        )
+        return list(result.scalars().all())
