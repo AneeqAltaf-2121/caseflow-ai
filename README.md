@@ -34,4 +34,16 @@ CaseFlow AI is being developed as a monorepo containing:
 
 ## Development Status
 
-Phase 0 — Repository and development environment setup.
+Following the phased build plan in `docs/`:
+
+- [x] Phase 0 — Repository, engineering standards, local environment skeleton
+- [x] Phase 1 — Architecture and domain model (`docs/architecture.md`, `docs/domain-model.md`, ADRs)
+- [x] Phase 2 — FastAPI application foundation (config, logging, errors, `/health`, `/ready`)
+- [x] Phase 3 — PostgreSQL persistence and Alembic migrations
+- [ ] Phase 4 — Authentication and authorization (in progress)
+- [ ] Phases 5–29 — see the build plan for the full sequence (frontend shell,
+      uploads, async ingestion, embeddings/retrieval, RAG, evaluation
+      framework, observability, Docker/CI/AWS, security hardening)
+
+Backend: from `apps/api`, run `pytest` (12 tests passing), `ruff check .`,
+and `mypy app`.
