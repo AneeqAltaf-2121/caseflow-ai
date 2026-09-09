@@ -1,15 +1,13 @@
 """Project business logic.
 
-Authorization note: every read here is scoped to a `requesting_user_id`.
-Until Phase 4 (OAuth) exists, routes pass this explicitly instead of
-deriving it from a session — see app/api/routes/projects.py. The
-scoping/checks below don't change once Phase 4 lands; only how the user id
-is obtained does.
+Authorization note: every read here is scoped to a `requesting_user_id`,
+derived from the authenticated session (see app/dependencies.py's
+CurrentUserIdDep) rather than trusted from client input.
 """
 
 import uuid
 
-from app.errors import ForbiddenError, NotFoundError
+from app.errors import ConflictError, ForbiddenError, NotFoundError
 from app.models.project import Project, ProjectMember, ProjectRole
 from app.repositories.project_repository import ProjectRepository
 
@@ -67,8 +65,8 @@ class ProjectService:
         self, *, project_id: uuid.UUID, user_id: uuid.UUID, allowed: set[ProjectRole]
     ) -> ProjectMember:
         """Raise ForbiddenError unless the user's role in the project is
-        one of `allowed`. Used by write operations in later phases
-        (upload, delete, invite, ...) once those routes exist."""
+        one of `allowed`. Used by every write operation that isn't plain
+        project creation (invite, upload, delete, ...)."""
         member = await self._repository.get_member(project_id=project_id, user_id=user_id)
         if member is None:
             raise NotFoundError(f"Project {project_id} not found.")
@@ -77,3 +75,34 @@ class ProjectService:
                 f"Role '{member.role.value}' is not permitted to perform this action."
             )
         return member
+
+    async def list_members(
+        self, *, project_id: uuid.UUID, user_id: uuid.UUID
+    ) -> list[ProjectMember]:
+        # Confirms the requester is themself a member before revealing the roster.
+        await self.get_project_for_user(project_id=project_id, user_id=user_id)
+        return await self._repository.list_members(project_id)
+
+    async def invite_member(
+        self,
+        *,
+        project_id: uuid.UUID,
+        inviter_user_id: uuid.UUID,
+        invitee_user_id: uuid.UUID,
+        role: ProjectRole,
+    ) -> ProjectMember:
+        """Add `invitee_user_id` to the project. Only owners can invite."""
+        await self.require_role(
+            project_id=project_id, user_id=inviter_user_id, allowed={ProjectRole.OWNER}
+        )
+
+        existing = await self._repository.get_member(project_id=project_id, user_id=invitee_user_id)
+        if existing is not None:
+            raise ConflictError("User is already a member of this project.")
+
+        return await self._repository.add_member(
+            project_id=project_id,
+            user_id=invitee_user_id,
+            role=role,
+            invited_by=inviter_user_id,
+        )
