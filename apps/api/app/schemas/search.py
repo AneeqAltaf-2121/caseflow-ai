@@ -15,3 +15,20 @@ class SearchResultRead(BaseModel):
     page_number: int
     text: str
     score: float
+
+
+class HybridSearchResultRead(BaseModel):
+    """Same shape as SearchResultRead plus the per-retriever diagnostics
+    reciprocal rank fusion combined (see app/retrieval/fusion.py) — a rank/
+    score is null when that retriever didn't surface this chunk at all."""
+
+    chunk_id: uuid.UUID
+    document_id: uuid.UUID
+    document_filename: str
+    page_number: int
+    text: str
+    fused_score: float
+    vector_rank: int | None
+    vector_score: float | None
+    keyword_rank: int | None
+    keyword_score: float | None

@@ -53,6 +53,19 @@ export interface SearchResult {
   score: number;
 }
 
+export interface HybridSearchResult {
+  chunk_id: string;
+  document_id: string;
+  document_filename: string;
+  page_number: number;
+  text: string;
+  fused_score: number;
+  vector_rank: number | null;
+  vector_score: number | null;
+  keyword_rank: number | null;
+  keyword_score: number | null;
+}
+
 export interface TokenPair {
   access_token: string;
   refresh_token: string;

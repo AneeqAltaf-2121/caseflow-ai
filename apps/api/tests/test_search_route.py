@@ -142,6 +142,69 @@ async def test_keyword_search_route_finds_exact_terms(
     assert "indemnification" in results[0]["text"].lower()
 
 
+async def test_hybrid_search_route_returns_fusion_diagnostics(
+    api_client: httpx.AsyncClient,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    tmp_path: Path,
+) -> None:
+    settings = get_settings()
+    settings.embedding_provider = "local"
+    try:
+        async with db_session_factory() as session:
+            owner = await UserRepository(session).create(email="h@x.com", display_name="Hybrid")
+            org = await OrganizationRepository(session).create(name="H", slug="h-corp")
+            await session.commit()
+        headers = _auth_headers(owner.id)
+
+        create_response = await api_client.post(
+            "/projects",
+            json={"organization_id": str(org.id), "name": "Hybrid project"},
+            headers=headers,
+        )
+        project_id = create_response.json()["id"]
+
+        upload_response = await api_client.post(
+            f"/projects/{project_id}/documents",
+            files={
+                "file": (
+                    "notes.txt",
+                    b"The termination clause takes effect after 90 days.",
+                    "text/plain",
+                )
+            },
+            headers=headers,
+        )
+        document_id = uuid.UUID(upload_response.json()["id"])
+
+        async with db_session_factory() as session:
+            job = (
+                await session.execute(select(Job).order_by(Job.created_at.desc()).limit(1))
+            ).scalar_one()
+
+        storage = LocalStorageBackend(Settings(local_storage_path=str(tmp_path)))
+        await process_document(
+            job_id=job.id,
+            document_id=document_id,
+            session_factory=db_session_factory,
+            storage=storage,
+            embedding_provider=get_embedding_provider(settings),
+        )
+
+        response = await api_client.post(
+            f"/projects/{project_id}/search/hybrid",
+            json={"query": "termination clause"},
+            headers=headers,
+        )
+        assert response.status_code == 200
+        results = response.json()
+        assert len(results) == 1
+        assert results[0]["vector_rank"] == 1
+        assert results[0]["keyword_rank"] == 1
+        assert results[0]["fused_score"] > 0
+    finally:
+        settings.embedding_provider = "mock"
+
+
 async def test_search_route_requires_authentication(api_client: httpx.AsyncClient) -> None:
     response = await api_client.post(f"/projects/{uuid.uuid4()}/search", json={"query": "anything"})
     assert response.status_code == 401
