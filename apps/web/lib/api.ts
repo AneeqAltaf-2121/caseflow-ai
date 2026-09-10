@@ -5,6 +5,7 @@ import type {
   AskAnswer,
   Conversation,
   ConversationDetail,
+  CostSummary,
   EvaluationRun,
   EvaluationRunDetail,
   HybridSearchResult,
@@ -236,6 +237,9 @@ export const api = {
     request<EvaluationRun[]>(`/projects/${projectId}/evaluations`),
   getEvaluationRun: (projectId: string, evaluationRunId: string) =>
     request<EvaluationRunDetail>(`/projects/${projectId}/evaluations/${evaluationRunId}`),
+
+  // --- costs ---
+  getCostSummary: (projectId: string) => request<CostSummary>(`/projects/${projectId}/costs`),
 };
 
 export { API_URL };

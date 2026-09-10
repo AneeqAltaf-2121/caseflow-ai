@@ -227,6 +227,27 @@ export interface EvaluationRunDetail extends EvaluationRun {
   results: EvaluationResult[];
 }
 
+export interface CostDay {
+  day: string;
+  model: string;
+  user_id: string;
+  total_cost_usd: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  run_count: number;
+}
+
+export interface CostSummary {
+  project_id: string;
+  total_cost_usd: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_runs: number;
+  by_day: CostDay[];
+  by_model: Record<string, number>;
+  by_user: Record<string, number>;
+}
+
 export interface TokenPair {
   access_token: string;
   refresh_token: string;

@@ -11,7 +11,9 @@ from app.database import Base
 from app.models.types import created_at_column, uuid_pk
 
 if TYPE_CHECKING:
+    from app.models.project import Project
     from app.models.prompt_version import PromptVersion
+    from app.models.user import User
 
 
 class ModelRunStatus(enum.StrEnum):
@@ -31,11 +33,25 @@ class ModelRun(Base):
     configuration (top_k, retriever/reranker version, embedding model)
     alongside each run, and JSON keeps that flexible as retrieval evolves
     without a schema migration per new knob.
+
+    `project_id`/`user_id` aren't in the original sketch either — added
+    for Phase 32's cost aggregation. Every call site (ConversationService,
+    the evaluation job) already knows both at creation time; storing them
+    directly here means aggregating spend by project/user/model/day is a
+    single GROUP BY on this table instead of two different join paths
+    (Message->Conversation vs EvaluationResult->EvaluationRun) that would
+    otherwise have to be unioned by hand.
     """
 
     __tablename__ = "model_runs"
 
     id: Mapped[uuid.UUID] = uuid_pk()
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
     provider: Mapped[str] = mapped_column(String(100), nullable=False)
     model: Mapped[str] = mapped_column(String(100), nullable=False)
     prompt_version_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -52,6 +68,8 @@ class ModelRun(Base):
     retrieval_config: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     created_at: Mapped[datetime] = created_at_column()
 
+    project: Mapped["Project"] = relationship()
+    user: Mapped["User"] = relationship()
     prompt_version: Mapped["PromptVersion | None"] = relationship()
 
     def __repr__(self) -> str:

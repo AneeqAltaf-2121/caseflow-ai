@@ -186,6 +186,8 @@ async def run_evaluation(
                 model_run_id = None
                 if answer.model != "none":
                     model_run = await model_run_repository.create(
+                        project_id=run.project_id,
+                        user_id=run.created_by,
                         provider=answer.provider,
                         model=answer.model,
                         prompt_version_id=run.prompt_version_id,
