@@ -266,6 +266,74 @@ async def test_rerank_route_narrows_to_top_k(
         settings.embedding_provider = "mock"
 
 
+async def test_ask_route_returns_grounded_answer_with_citation(
+    api_client: httpx.AsyncClient,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    tmp_path: Path,
+) -> None:
+    settings = get_settings()
+    settings.embedding_provider = "local"
+    try:
+        async with db_session_factory() as session:
+            owner = await UserRepository(session).create(email="ask@x.com", display_name="Asker")
+            org = await OrganizationRepository(session).create(name="Ask", slug="ask-corp")
+            await session.commit()
+        headers = _auth_headers(owner.id)
+
+        create_response = await api_client.post(
+            "/projects",
+            json={"organization_id": str(org.id), "name": "Ask project"},
+            headers=headers,
+        )
+        project_id = create_response.json()["id"]
+
+        upload_response = await api_client.post(
+            f"/projects/{project_id}/documents",
+            files={
+                "file": (
+                    "notes.txt",
+                    b"The termination clause takes effect after 90 days.",
+                    "text/plain",
+                )
+            },
+            headers=headers,
+        )
+        document_id = uuid.UUID(upload_response.json()["id"])
+
+        async with db_session_factory() as session:
+            job = (
+                await session.execute(select(Job).order_by(Job.created_at.desc()).limit(1))
+            ).scalar_one()
+
+        storage = LocalStorageBackend(Settings(local_storage_path=str(tmp_path)))
+        await process_document(
+            job_id=job.id,
+            document_id=document_id,
+            session_factory=db_session_factory,
+            storage=storage,
+            embedding_provider=get_embedding_provider(settings),
+        )
+
+        response = await api_client.post(
+            f"/projects/{project_id}/ask",
+            json={"question": "when does the termination clause take effect?"},
+            headers=headers,
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["sources_considered"] == 1
+        assert len(body["citations"]) == 1
+        assert body["citations"][0]["document_filename"] == "notes.txt"
+        assert body["citations"][0]["page_number"] == 1
+    finally:
+        settings.embedding_provider = "mock"
+
+
+async def test_ask_route_requires_authentication(api_client: httpx.AsyncClient) -> None:
+    response = await api_client.post(f"/projects/{uuid.uuid4()}/ask", json={"question": "anything"})
+    assert response.status_code == 401
+
+
 async def test_search_route_requires_authentication(api_client: httpx.AsyncClient) -> None:
     response = await api_client.post(f"/projects/{uuid.uuid4()}/search", json={"query": "anything"})
     assert response.status_code == 401
