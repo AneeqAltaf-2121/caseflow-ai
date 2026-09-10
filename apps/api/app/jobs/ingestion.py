@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.config import get_settings
 from app.database import create_engine, create_session_factory
 from app.errors import ValidationError
+from app.ingestion.chunker import chunk_document
 from app.ingestion.pipeline import extract_document
 from app.integrations.storage import StorageBackend, get_storage_backend
 from app.models.document import DocumentStatus
@@ -64,6 +65,11 @@ async def process_document(
             extracted = extract_document(
                 content_type=document.content_type, data=data, filename=document.filename
             )
+            # Nowhere to persist chunks yet (DocumentChunk/pgvector land in
+            # Phase 11) — computing them here already proves the chunker
+            # runs cleanly against every real extracted document, ahead of
+            # the phase that needs the count to actually mean something.
+            chunks = chunk_document(extracted)
         except ValidationError as exc:
             # Not transient (corrupt/unreadable file, unsupported content
             # type) — retrying the same bytes would just fail the same way,
@@ -114,6 +120,7 @@ async def process_document(
             document_id=str(document_id),
             page_count=extracted.page_count,
             char_count=len(extracted.full_text),
+            chunk_count=len(chunks),
         )
 
 
