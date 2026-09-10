@@ -16,7 +16,15 @@ SYSTEM_PROMPT = (
 )
 
 
-def build_user_prompt(*, question: str, context: str) -> str:
-    if not context:
-        return f"No source passages were found for this project.\n\nQuestion: {question}"
-    return f"Sources:\n{context}\n\nQuestion: {question}"
+def build_user_prompt(*, question: str, context: str, history: str = "") -> str:
+    """`history` (see app/rag/history.py) is prior conversation turns, not
+    retrieved evidence — kept as a separate section so the model doesn't
+    treat something a user said earlier as a citable source."""
+    parts = []
+    if history:
+        parts.append(f"Previous conversation:\n{history}")
+    parts.append(
+        f"Sources:\n{context}" if context else "No source passages were found for this project."
+    )
+    parts.append(f"Question: {question}")
+    return "\n\n".join(parts)

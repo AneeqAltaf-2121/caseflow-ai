@@ -3,7 +3,10 @@ import { clearTokens, getAccessToken, getRefreshToken, setTokens } from "./token
 import type {
   ApiErrorBody,
   AskAnswer,
+  Conversation,
+  ConversationDetail,
   HybridSearchResult,
+  PostMessageResponse,
   Project,
   ProjectDocument,
   ProjectMember,
@@ -181,6 +184,31 @@ export const api = {
     request<AskAnswer>(`/projects/${projectId}/ask`, {
       method: "POST",
       body: { question, top_k: topK },
+    }),
+
+  // --- conversations ---
+  createConversation: (projectId: string, title?: string) =>
+    request<Conversation>(`/projects/${projectId}/conversations`, {
+      method: "POST",
+      body: { title: title ?? "Untitled" },
+    }),
+  listConversations: (projectId: string) =>
+    request<Conversation[]>(`/projects/${projectId}/conversations`),
+  getConversation: (projectId: string, conversationId: string) =>
+    request<ConversationDetail>(`/projects/${projectId}/conversations/${conversationId}`),
+  renameConversation: (projectId: string, conversationId: string, title: string) =>
+    request<Conversation>(`/projects/${projectId}/conversations/${conversationId}`, {
+      method: "PATCH",
+      body: { title },
+    }),
+  deleteConversation: (projectId: string, conversationId: string) =>
+    request<void>(`/projects/${projectId}/conversations/${conversationId}`, {
+      method: "DELETE",
+    }),
+  postMessage: (projectId: string, conversationId: string, content: string, topK = 6) =>
+    request<PostMessageResponse>(`/projects/${projectId}/conversations/${conversationId}/messages`, {
+      method: "POST",
+      body: { content, top_k: topK },
     }),
 };
 

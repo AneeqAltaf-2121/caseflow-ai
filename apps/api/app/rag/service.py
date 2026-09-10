@@ -2,9 +2,11 @@
 context -> generate -> extract + validate citations. Grounding
 (Phase 20): refuse to guess when there's no evidence to answer from.
 
-Stateless for now — nothing here persists a Conversation/Message/Citation
-row (those tables/wiring are Phase 21). This is the core RAG mechanism
-Phase 21's persistent-conversation endpoints call and store the result of.
+Doesn't persist anything itself — ConversationService (Phase 21) is what
+calls this per turn and stores the result as Message/Citation rows,
+passing in a bounded slice of prior turns as `history` (see
+app/rag/history.py) so a long conversation doesn't grow every prompt
+without bound.
 """
 
 import uuid
@@ -60,6 +62,7 @@ class RagService:
         user_id: uuid.UUID,
         query: str,
         top_k: int = DEFAULT_TOP_K,
+        history: str = "",
     ) -> RagAnswer:
         results = await self._retrieval_service.retrieve(
             project_id=project_id, user_id=user_id, query=query, top_k=top_k
@@ -80,7 +83,7 @@ class RagService:
         context = build_context(chunks)
         generation = await self._generation_provider.generate(
             system_prompt=SYSTEM_PROMPT,
-            user_prompt=build_user_prompt(question=query, context=context),
+            user_prompt=build_user_prompt(question=query, context=context, history=history),
         )
 
         cited_numbers = extract_cited_source_numbers(generation.text, source_count=len(chunks))

@@ -1,6 +1,7 @@
 import enum
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy import ForeignKey, String, Text
@@ -8,6 +9,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.models.types import created_at_column, updated_at_column, uuid_pk
+
+if TYPE_CHECKING:
+    from app.models.citation import Citation
 
 
 class MessageRole(enum.StrEnum):
@@ -40,8 +44,9 @@ class Conversation(Base):
 class Message(Base):
     """A single turn in a conversation.
 
-    `prompt_version_id` / `model_run_id` are added in Phase 14 once prompt
-    and model-run tracking exist; citations are added in Phase 11.
+    `prompt_version_id` / `model_run_id` are added once prompt and
+    model-run tracking exist (see docs/domain-model.md's PromptVersion/
+    ModelRun entities).
     """
 
     __tablename__ = "messages"
@@ -57,6 +62,11 @@ class Message(Base):
     created_at: Mapped[datetime] = created_at_column()
 
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")
+    citations: Mapped[list["Citation"]] = relationship(
+        back_populates="message",
+        cascade="all, delete-orphan",
+        order_by="Citation.source_number",
+    )
 
     def __repr__(self) -> str:
         return f"<Message id={self.id} role={self.role}>"

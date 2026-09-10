@@ -83,6 +83,47 @@ export interface AskAnswer {
   insufficient_evidence: boolean;
 }
 
+export interface Conversation {
+  id: string;
+  project_id: string;
+  title: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ConversationCitation {
+  id: string;
+  source_number: number;
+  document_id: string;
+  document_chunk_id: string;
+  document_filename: string;
+  page_number: number;
+  quote: string;
+}
+
+export type MessageRole = "user" | "assistant";
+
+export interface ConversationMessage {
+  id: string;
+  role: MessageRole;
+  content: string;
+  created_at: string;
+  citations: ConversationCitation[];
+}
+
+export interface ConversationDetail extends Conversation {
+  messages: ConversationMessage[];
+}
+
+export interface PostMessageResponse {
+  user_message: ConversationMessage;
+  assistant_message: ConversationMessage;
+  insufficient_evidence: boolean;
+  sources_considered: number;
+  model: string;
+}
+
 export interface TokenPair {
   access_token: string;
   refresh_token: string;
