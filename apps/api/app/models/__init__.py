@@ -9,6 +9,7 @@ from app.models.chunk import EMBEDDING_DIMENSIONS, DocumentChunk
 from app.models.citation import Citation
 from app.models.conversation import Conversation, Message, MessageRole
 from app.models.document import Document, DocumentStatus, DocumentVersion
+from app.models.evaluation import EvaluationResult, EvaluationRun, EvaluationRunStatus
 from app.models.job import Job, JobStatus
 from app.models.model_run import ModelRun, ModelRunStatus
 from app.models.organization import Organization
@@ -28,6 +29,9 @@ __all__ = [
     "DocumentStatus",
     "DocumentVersion",
     "EMBEDDING_DIMENSIONS",
+    "EvaluationResult",
+    "EvaluationRun",
+    "EvaluationRunStatus",
     "Job",
     "JobStatus",
     "ModelRun",
