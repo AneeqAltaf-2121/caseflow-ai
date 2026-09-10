@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from app.api.routes import (
     auth,
     conversations,
+    costs,
     documents,
     evaluations,
     health,
@@ -26,3 +27,4 @@ api_router.include_router(conversations.router)
 api_router.include_router(prompt_versions.router)
 api_router.include_router(reports.router)
 api_router.include_router(evaluations.router)
+api_router.include_router(costs.router)

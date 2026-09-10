@@ -163,6 +163,8 @@ class ConversationService:
         model_run_id = None
         if answer.model != "none":
             model_run = await self._model_run_repository.create(
+                project_id=project_id,
+                user_id=user_id,
                 provider=answer.provider,
                 model=answer.model,
                 prompt_version_id=prompt_version.id,
