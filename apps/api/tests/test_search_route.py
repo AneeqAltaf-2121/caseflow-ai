@@ -86,6 +86,62 @@ async def test_search_route_returns_uploaded_document_content(
         settings.embedding_provider = "mock"
 
 
+async def test_keyword_search_route_finds_exact_terms(
+    api_client: httpx.AsyncClient,
+    db_session_factory: async_sessionmaker[AsyncSession],
+    tmp_path: Path,
+) -> None:
+    async with db_session_factory() as session:
+        owner = await UserRepository(session).create(email="k@x.com", display_name="Keyword")
+        org = await OrganizationRepository(session).create(name="K", slug="k-corp")
+        await session.commit()
+    headers = _auth_headers(owner.id)
+
+    create_response = await api_client.post(
+        "/projects",
+        json={"organization_id": str(org.id), "name": "Keyword project"},
+        headers=headers,
+    )
+    project_id = create_response.json()["id"]
+
+    upload_response = await api_client.post(
+        f"/projects/{project_id}/documents",
+        files={
+            "file": (
+                "terms.txt",
+                b"The indemnification clause survives termination.",
+                "text/plain",
+            )
+        },
+        headers=headers,
+    )
+    document_id = uuid.UUID(upload_response.json()["id"])
+
+    async with db_session_factory() as session:
+        job = (
+            await session.execute(select(Job).order_by(Job.created_at.desc()).limit(1))
+        ).scalar_one()
+
+    storage = LocalStorageBackend(Settings(local_storage_path=str(tmp_path)))
+    await process_document(
+        job_id=job.id,
+        document_id=document_id,
+        session_factory=db_session_factory,
+        storage=storage,
+        embedding_provider=get_embedding_provider(get_settings()),
+    )
+
+    response = await api_client.post(
+        f"/projects/{project_id}/search/keyword",
+        json={"query": "indemnification"},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    results = response.json()
+    assert len(results) == 1
+    assert "indemnification" in results[0]["text"].lower()
+
+
 async def test_search_route_requires_authentication(api_client: httpx.AsyncClient) -> None:
     response = await api_client.post(f"/projects/{uuid.uuid4()}/search", json={"query": "anything"})
     assert response.status_code == 401
