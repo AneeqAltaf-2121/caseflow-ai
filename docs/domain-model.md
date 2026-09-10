@@ -63,7 +63,13 @@ A single turn in a Conversation.
 ### Citation
 A link from an assistant Message to the DocumentChunk(s) that ground it.
 
-- `id`, `message_id`, `document_id`, `document_chunk_id`, `page_number`, `quote`
+- `id`, `message_id`, `document_id`, `document_chunk_id`, `source_number`,
+  `page_number`, `quote`
+
+  `source_number` is the `[n]` marker the answer text actually cites (see
+  `app/rag/citations.py`) — without it, a redisplayed conversation
+  couldn't match citation markers in old answer text back to a specific
+  source.
 
 ### PromptVersion
 An immutable, named/versioned prompt template. Prompts are never edited in
