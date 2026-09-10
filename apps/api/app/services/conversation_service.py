@@ -8,6 +8,8 @@ context.
 import uuid
 from dataclasses import dataclass
 
+import structlog
+
 from app.errors import NotFoundError
 from app.integrations.pricing import estimate_cost_usd
 from app.models.citation import Citation
@@ -24,6 +26,8 @@ from app.services.project_service import ProjectService
 from app.services.prompt_version_service import RAG_ANSWER_PROMPT_NAME, PromptVersionService
 
 DEFAULT_TITLE = "Untitled"
+
+logger = structlog.get_logger("caseflow.conversations")
 
 
 @dataclass(frozen=True)
@@ -181,6 +185,14 @@ class ConversationService:
                 retrieval_config=answer.retrieval_config,
             )
             model_run_id = model_run.id
+            logger.info(
+                "model_run_recorded",
+                model_run_id=str(model_run.id),
+                model=model_run.model,
+                provider=model_run.provider,
+                latency_ms=model_run.latency_ms,
+                estimated_cost_usd=model_run.estimated_cost_usd,
+            )
 
         citation_rows = [_to_citation_row(c) for c in answer.citations]
         assistant_message = await self._repository.add_message(
