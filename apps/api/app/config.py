@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     # see app/integrations/llm.py and app/integrations/embeddings.py.
     llm_provider: Literal["mock", "anthropic", "openai"] = "mock"
     embedding_provider: Literal["mock", "local", "openai"] = "mock"
+    # Informational only — the actual DB column width is fixed by the
+    # document_chunks migration and app.models.chunk.EMBEDDING_DIMENSIONS.
+    # Changing this setting alone does not resize the column; that needs a
+    # new migration.
     embedding_dimensions: int = 384
 
     aws_region: str = ""
