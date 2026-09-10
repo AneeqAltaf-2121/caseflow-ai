@@ -124,6 +124,49 @@ export interface PostMessageResponse {
   model: string;
 }
 
+export type ReportType =
+  | "executive_summary"
+  | "evidence_report"
+  | "risk_analysis"
+  | "chronology"
+  | "contradiction_report"
+  | "research_memo";
+
+export type ReportStatus = "queued" | "processing" | "ready" | "failed";
+
+export interface Report {
+  id: string;
+  project_id: string;
+  report_type: ReportType;
+  title: string;
+  status: ReportStatus;
+  error: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+export interface ReportCitation {
+  id: string;
+  source_number: number;
+  document_id: string;
+  document_chunk_id: string;
+  document_filename: string;
+  page_number: number;
+  quote: string;
+}
+
+export interface ReportSection {
+  id: string;
+  heading: string;
+  content: string;
+  position: number;
+  citations: ReportCitation[];
+}
+
+export interface ReportDetail extends Report {
+  sections: ReportSection[];
+}
+
 export interface TokenPair {
   access_token: string;
   refresh_token: string;
