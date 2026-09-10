@@ -1,20 +1,21 @@
 """Document processing job.
 
-Reads the file back out of storage and runs it through the extraction
-pipeline (app/ingestion/), with real retry/backoff and a durable Job
-record. There's nowhere to persist the extracted text yet — chunking
-(Phase 10) and DocumentChunk/pgvector (Phase 11) land in later phases — so
-for now a successful extraction just proves the pipeline runs end-to-end
-and marks the document READY; nothing is stored beyond that yet.
+Reads the file back out of storage and runs it through the full pipeline:
+extract (app/ingestion/pipeline.py) -> chunk (app/ingestion/chunker.py) ->
+embed (app/integrations/embeddings.py) -> persist DocumentChunk rows with
+their vectors -> mark the document READY. Real retry/backoff and a
+durable Job record throughout.
 
 `process_document` is a plain async function so tests can call it directly
-against the test session factory/storage backend, without a running broker
-or worker process. `process_document_job` is the thin, untested-in-CI
-Dramatiq actor that wires it to real Postgres/Redis/S3 in production.
+against the test session factory/storage/embedding provider, without a
+running broker or worker process. `process_document_job` is the thin,
+untested-in-CI Dramatiq actor that wires it to real Postgres/Redis/S3/
+embedding-API in production.
 """
 
 import asyncio
 import uuid
+from datetime import UTC, datetime
 
 import dramatiq
 import structlog
@@ -25,12 +26,20 @@ from app.database import create_engine, create_session_factory
 from app.errors import ValidationError
 from app.ingestion.chunker import chunk_document
 from app.ingestion.pipeline import extract_document
+from app.integrations.embeddings import EmbeddingProvider, get_embedding_provider
 from app.integrations.storage import StorageBackend, get_storage_backend
+from app.models.chunk import DocumentChunk
 from app.models.document import DocumentStatus
+from app.repositories.chunk_repository import DocumentChunkRepository
 from app.repositories.document_repository import DocumentRepository
 from app.repositories.job_repository import JobRepository
 
 logger = structlog.get_logger("caseflow.jobs.ingestion")
+
+# How many chunk texts go into one embed() call — bounds request size for
+# real API-backed providers (OpenAI) on very large documents. Irrelevant
+# to in-process providers (mock/local) beyond a little extra looping.
+EMBEDDING_BATCH_SIZE = 64
 
 
 async def process_document(
@@ -39,10 +48,12 @@ async def process_document(
     document_id: uuid.UUID,
     session_factory: async_sessionmaker[AsyncSession],
     storage: StorageBackend,
+    embedding_provider: EmbeddingProvider,
 ) -> None:
     async with session_factory() as session:
         job_repo = JobRepository(session)
         doc_repo = DocumentRepository(session)
+        chunk_repo = DocumentChunkRepository(session)
 
         job = await job_repo.get_by_id(job_id)
         if job is None:
@@ -65,11 +76,12 @@ async def process_document(
             extracted = extract_document(
                 content_type=document.content_type, data=data, filename=document.filename
             )
-            # Nowhere to persist chunks yet (DocumentChunk/pgvector land in
-            # Phase 11) — computing them here already proves the chunker
-            # runs cleanly against every real extracted document, ahead of
-            # the phase that needs the count to actually mean something.
             chunks = chunk_document(extracted)
+
+            embeddings: list[list[float]] = []
+            for start in range(0, len(chunks), EMBEDDING_BATCH_SIZE):
+                batch = chunks[start : start + EMBEDDING_BATCH_SIZE]
+                embeddings.extend(await embedding_provider.embed([c.text for c in batch]))
         except ValidationError as exc:
             # Not transient (corrupt/unreadable file, unsupported content
             # type) — retrying the same bytes would just fail the same way,
@@ -111,6 +123,40 @@ async def process_document(
             )
             raise  # let Dramatiq's Retries middleware redeliver with backoff
 
+        # Idempotent under retry: a previous attempt may have already
+        # persisted chunks for this document before failing partway
+        # through (e.g. mid-embedding-batch on a transient API error).
+        # Clearing first means a retried run never leaves duplicates.
+        await chunk_repo.delete_for_document(document.id)
+
+        # `document.versions` is eager-loaded (selectinload) and ordered
+        # by version_number (see Document.versions) — the last entry is
+        # always the current version, matching document.storage_key.
+        current_version = document.versions[-1]
+        embedded_at = datetime.now(UTC).isoformat()
+        embedding_version = f"{type(embedding_provider).__name__}:{embedding_provider.dimensions}"
+
+        rows = [
+            DocumentChunk(
+                document_id=document.id,
+                document_version_id=current_version.id,
+                page_number=chunk.page_number,
+                section=None,
+                text=chunk.text,
+                token_count=chunk.token_count,
+                start_offset=chunk.start_offset,
+                end_offset=chunk.end_offset,
+                embedding=embedding,
+                chunk_metadata={
+                    "embedding_version": embedding_version,
+                    "embedded_at": embedded_at,
+                },
+            )
+            for chunk, embedding in zip(chunks, embeddings, strict=True)
+        ]
+        if rows:
+            await chunk_repo.bulk_create(rows)
+
         await doc_repo.update_status(document, DocumentStatus.READY)
         await job_repo.mark_succeeded(job)
         await session.commit()
@@ -121,18 +167,20 @@ async def process_document(
             page_count=extracted.page_count,
             char_count=len(extracted.full_text),
             chunk_count=len(chunks),
+            embedding_version=embedding_version,
         )
 
 
 @dramatiq.actor(max_retries=3, min_backoff=1_000, max_backoff=30_000, queue_name="ingestion")
 def process_document_job(job_id: str, document_id: str) -> None:
     """The actual Dramatiq entrypoint — not exercised in CI (needs a real
-    Postgres + Redis), kept intentionally thin so all the logic worth
-    testing lives in `process_document` above."""
+    Postgres + Redis + embedding provider), kept intentionally thin so all
+    the logic worth testing lives in `process_document` above."""
     settings = get_settings()
     engine = create_engine(settings)
     session_factory = create_session_factory(engine)
     storage = get_storage_backend(settings)
+    embedding_provider = get_embedding_provider(settings)
     try:
         asyncio.run(
             process_document(
@@ -140,6 +188,7 @@ def process_document_job(job_id: str, document_id: str) -> None:
                 document_id=uuid.UUID(document_id),
                 session_factory=session_factory,
                 storage=storage,
+                embedding_provider=embedding_provider,
             )
         )
     finally:

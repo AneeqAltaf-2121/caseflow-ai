@@ -5,10 +5,12 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
+from app.integrations.embeddings import MockEmbeddingProvider
 from app.integrations.storage import LocalStorageBackend
 from app.jobs.ingestion import process_document
 from app.models.document import DocumentStatus
 from app.models.job import JobStatus
+from app.repositories.chunk_repository import DocumentChunkRepository
 from app.repositories.document_repository import DocumentRepository
 from app.repositories.job_repository import JobRepository
 from app.repositories.organization_repository import OrganizationRepository
@@ -25,7 +27,8 @@ async def _seed_document(db_session: AsyncSession, *, storage_key: str | None = 
     project = await ProjectService(ProjectRepository(db_session)).create_project(
         organization_id=org.id, name="Ingestion", description=None, created_by=user.id
     )
-    document = await DocumentRepository(db_session).create(
+    document_repository = DocumentRepository(db_session)
+    document = await document_repository.create(
         project_id=project.id,
         filename="notes.txt",
         content_type="text/plain",
@@ -35,14 +38,14 @@ async def _seed_document(db_session: AsyncSession, *, storage_key: str | None = 
         uploaded_by=user.id,
     )
     await db_session.commit()
-    return document
+    return await document_repository.get_by_id(document.id)
 
 
-async def test_process_document_succeeds_and_marks_ready(
+async def test_process_document_succeeds_marks_ready_and_stores_embedded_chunks(
     db_session_factory: async_sessionmaker[AsyncSession], tmp_path: Path
 ) -> None:
     storage = LocalStorageBackend(Settings(local_storage_path=str(tmp_path)))
-    await storage.put(key="docs/notes.txt", data=b"hello")
+    await storage.put(key="docs/notes.txt", data=b"Paragraph one.\n\nParagraph two.")
 
     async with db_session_factory() as session:
         document = await _seed_document(session, storage_key="docs/notes.txt")
@@ -53,7 +56,11 @@ async def test_process_document_succeeds_and_marks_ready(
         job_id, document_id = job.id, document.id
 
     await process_document(
-        job_id=job_id, document_id=document_id, session_factory=db_session_factory, storage=storage
+        job_id=job_id,
+        document_id=document_id,
+        session_factory=db_session_factory,
+        storage=storage,
+        embedding_provider=MockEmbeddingProvider(dimensions=16),
     )
 
     async with db_session_factory() as session:
@@ -64,12 +71,24 @@ async def test_process_document_succeeds_and_marks_ready(
         assert refreshed_job.status == JobStatus.SUCCEEDED
         assert refreshed_job.attempt == 1
 
+        chunks = await DocumentChunkRepository(session).list_for_document(document_id)
+        # Both short paragraphs fit comfortably under the default
+        # max_tokens budget, so the chunker (Phase 10) packs them into one
+        # chunk — this test is about embedding/persistence, not chunking.
+        assert len(chunks) == 1
+        for chunk in chunks:
+            assert chunk.embedding is not None
+            assert len(chunk.embedding) == 16
+            assert chunk.document_version_id == refreshed_document.versions[-1].id
+            assert chunk.chunk_metadata["embedding_version"] == "MockEmbeddingProvider:16"
+
 
 async def test_process_document_retries_then_fails_permanently(
     db_session_factory: async_sessionmaker[AsyncSession], tmp_path: Path
 ) -> None:
     storage = LocalStorageBackend(Settings(local_storage_path=str(tmp_path)))
     # storage_key is never written, so storage.get() always raises.
+    embedding_provider = MockEmbeddingProvider(dimensions=8)
 
     async with db_session_factory() as session:
         document = await _seed_document(session)
@@ -87,6 +106,7 @@ async def test_process_document_retries_then_fails_permanently(
             document_id=document_id,
             session_factory=db_session_factory,
             storage=storage,
+            embedding_provider=embedding_provider,
         )
 
     async with db_session_factory() as session:
@@ -98,7 +118,11 @@ async def test_process_document_retries_then_fails_permanently(
 
     # Attempt 2 (== max_attempts): fails permanently, does not re-raise.
     await process_document(
-        job_id=job_id, document_id=document_id, session_factory=db_session_factory, storage=storage
+        job_id=job_id,
+        document_id=document_id,
+        session_factory=db_session_factory,
+        storage=storage,
+        embedding_provider=embedding_provider,
     )
 
     async with db_session_factory() as session:
@@ -120,4 +144,39 @@ async def test_process_document_handles_missing_job(
         document_id=uuid.uuid4(),
         session_factory=db_session_factory,
         storage=storage,
+        embedding_provider=MockEmbeddingProvider(dimensions=8),
     )
+
+
+async def test_reprocessing_a_document_does_not_duplicate_chunks(
+    db_session_factory: async_sessionmaker[AsyncSession], tmp_path: Path
+) -> None:
+    storage = LocalStorageBackend(Settings(local_storage_path=str(tmp_path)))
+    await storage.put(key="docs/notes.txt", data=b"Only one paragraph here.")
+    embedding_provider = MockEmbeddingProvider(dimensions=8)
+
+    async with db_session_factory() as session:
+        document = await _seed_document(session, storage_key="docs/notes.txt")
+        document_id = document.id
+
+    async def _run_once() -> None:
+        async with db_session_factory() as session:
+            job = await JobRepository(session).create(
+                type="document_ingestion", payload={"document_id": str(document_id)}
+            )
+            await session.commit()
+            job_id = job.id
+        await process_document(
+            job_id=job_id,
+            document_id=document_id,
+            session_factory=db_session_factory,
+            storage=storage,
+            embedding_provider=embedding_provider,
+        )
+
+    await _run_once()
+    await _run_once()
+
+    async with db_session_factory() as session:
+        chunks = await DocumentChunkRepository(session).list_for_document(document_id)
+        assert len(chunks) == 1
