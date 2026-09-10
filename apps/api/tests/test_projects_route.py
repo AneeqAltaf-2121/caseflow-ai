@@ -54,6 +54,25 @@ async def test_create_and_fetch_project(
     assert any(p["id"] == project_id for p in list_response.json())
 
 
+async def test_create_project_without_organization_id_auto_provisions_one(
+    api_client: httpx.AsyncClient, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    async with db_session_factory() as session:
+        user = await UserRepository(session).create(
+            email="no-org@example.com", display_name="No Org"
+        )
+        await session.commit()
+    headers = _auth_headers(user.id)
+
+    first = await api_client.post("/projects", json={"name": "First"}, headers=headers)
+    assert first.status_code == 201
+    second = await api_client.post("/projects", json={"name": "Second"}, headers=headers)
+    assert second.status_code == 201
+
+    # Same user reuses the same auto-provisioned personal organization.
+    assert first.json()["organization_id"] == second.json()["organization_id"]
+
+
 async def test_project_routes_require_authentication(api_client: httpx.AsyncClient) -> None:
     response = await api_client.get("/projects")
     assert response.status_code == 401

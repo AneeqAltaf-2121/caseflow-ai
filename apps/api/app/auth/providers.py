@@ -102,9 +102,13 @@ class MockOAuthProvider:
         self._settings = settings
 
     def authorize_url(self, *, state: str) -> str:
+        # Unlike Google, the mock "provider" never actually redirects a
+        # browser anywhere — the frontend's dev login calls
+        # exchange_code("mock", email) directly (see lib/auth-context.tsx).
+        # This URL exists only so /auth/mock/login has the same response
+        # shape as a real provider for anything that does call it (tests).
         params = {"code": state, "state": state}
-        base = self._settings.oauth_redirect_url.replace("/google/", "/mock/")
-        return f"{base}?{urlencode(params)}"
+        return f"/auth/mock/callback?{urlencode(params)}"
 
     async def exchange_code(self, *, code: str) -> OAuthUserInfo:
         email = code.strip()

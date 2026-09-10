@@ -12,6 +12,7 @@ from fastapi import APIRouter
 
 from app.dependencies import CurrentUserIdDep, DbSessionDep
 from app.errors import NotFoundError
+from app.repositories.organization_repository import OrganizationRepository
 from app.repositories.project_repository import ProjectRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.project import (
@@ -30,9 +31,18 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 async def create_project(
     payload: ProjectCreate, current_user_id: CurrentUserIdDep, db: DbSessionDep
 ) -> ProjectRead:
+    organization_id = payload.organization_id
+    if organization_id is None:
+        user = await UserRepository(db).get_by_id(current_user_id)
+        assert user is not None  # current_user_id came from a verified token
+        organization = await OrganizationRepository(db).get_or_create_personal(
+            user_id=user.id, display_name=user.display_name
+        )
+        organization_id = organization.id
+
     service = ProjectService(ProjectRepository(db))
     project = await service.create_project(
-        organization_id=payload.organization_id,
+        organization_id=organization_id,
         name=payload.name,
         description=payload.description,
         created_by=current_user_id,

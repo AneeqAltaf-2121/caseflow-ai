@@ -31,7 +31,11 @@ class Settings(BaseSettings):
 
     oauth_client_id: str = ""
     oauth_client_secret: str = ""
-    oauth_redirect_url: str = "http://localhost:8000/auth/google/callback"
+    # The frontend page Google redirects back to after consent (apps/web's
+    # app/login/callback), NOT a backend route — the frontend takes the
+    # `code` it receives there and calls GET /auth/google/callback itself
+    # to exchange it for session tokens. See docs/decisions/004.
+    oauth_redirect_url: str = "http://localhost:3000/login/callback"
 
     # Signs/verifies session JWTs (see app/auth/jwt.py). Must be overridden
     # with a long random value outside development — see .env.example.
