@@ -38,7 +38,11 @@ from app.evals.graders import (
 )
 from app.evals.retrieval_evaluation import evaluate_retrieval
 from app.integrations.embeddings import EmbeddingProvider, get_embedding_provider
-from app.integrations.generation import GenerationProvider, get_generation_provider
+from app.integrations.generation import (
+    GenerationProvider,
+    get_generation_provider,
+    get_generation_provider_by_model,
+)
 from app.integrations.pricing import estimate_cost_usd
 from app.models.model_run import ModelRunStatus
 from app.rag.service import RagService
@@ -262,21 +266,43 @@ async def run_evaluation(
         )
 
 
+async def _resolve_run_model(
+    evaluation_run_id: uuid.UUID, session_factory: async_sessionmaker[AsyncSession]
+) -> str | None:
+    """A tiny pre-read so the job can build the right GenerationProvider
+    for this specific run's `model` column (Phase 31 model comparison) —
+    separate from `run_evaluation`'s own, already-tested load of `run`,
+    so that function's signature and tests stay untouched."""
+    async with session_factory() as session:
+        run = await EvaluationRunRepository(session).get_by_id(evaluation_run_id)
+        return run.model if run else None
+
+
 @dramatiq.actor(max_retries=3, min_backoff=2_000, max_backoff=60_000, queue_name="evaluations")
 def run_evaluation_job(job_id: str, evaluation_run_id: str) -> None:
     """The actual Dramatiq entrypoint — not exercised in CI (needs a real
     Postgres + Redis + LLM provider), kept intentionally thin so all the
-    logic worth testing lives in `run_evaluation` above. The judge and the
-    answering model are the same configured GenerationProvider — nothing
-    stops passing a different one as `judge_provider` for a stronger
-    judge, but that's a Phase 31+ concern."""
+    logic worth testing lives in `run_evaluation` above.
+
+    The answering model is resolved from the EvaluationRun's own `model`
+    column (set at creation time — see EvaluationRunService.create_run) so
+    a run created with an explicit model override (Phase 31 model
+    comparison) is actually answered by that model, not whatever's
+    globally configured. The judge stays the single globally configured
+    provider regardless — comparing several models fairly means grading
+    them all with the same judge, not a different one per run.
+    """
     settings = get_settings()
     engine = create_engine(settings)
     session_factory = create_session_factory(engine)
     embedding_provider = get_embedding_provider(settings)
-    generation_provider = get_generation_provider(settings)
+    judge_provider = get_generation_provider(settings)
     reranker = CrossEncoderReranker()
     try:
+        run_model = asyncio.run(_resolve_run_model(uuid.UUID(evaluation_run_id), session_factory))
+        generation_provider = (
+            get_generation_provider_by_model(run_model, settings) if run_model else judge_provider
+        )
         asyncio.run(
             run_evaluation(
                 job_id=uuid.UUID(job_id),
@@ -285,7 +311,7 @@ def run_evaluation_job(job_id: str, evaluation_run_id: str) -> None:
                 embedding_provider=embedding_provider,
                 reranker=reranker,
                 generation_provider=generation_provider,
-                judge_provider=generation_provider,
+                judge_provider=judge_provider,
             )
         )
     finally:

@@ -176,3 +176,70 @@ async def test_create_evaluation_run_with_unknown_dataset_returns_404(
         headers=headers,
     )
     assert response.status_code == 404
+
+
+async def test_create_evaluation_run_with_explicit_model_override(
+    api_client: httpx.AsyncClient, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    """Phase 31 model comparison: two runs of the same dataset can be
+    created with different `model` values, each recorded on its own
+    EvaluationRun row — the basis for comparing them."""
+    async with db_session_factory() as session:
+        owner = await UserRepository(session).create(email="eo4@x.com", display_name="Owner")
+        org = await OrganizationRepository(session).create(name="EV4", slug="ev4-corp")
+        await session.commit()
+    headers = _auth_headers(owner.id)
+
+    project_id = (
+        await api_client.post(
+            "/projects",
+            json={"organization_id": str(org.id), "name": "Model comparison project"},
+            headers=headers,
+        )
+    ).json()["id"]
+
+    default_run = await api_client.post(
+        f"/projects/{project_id}/evaluations",
+        json={"dataset_name": "sample_contract_qa"},
+        headers=headers,
+    )
+    assert default_run.status_code == 201
+    assert default_run.json()["model"] == "mock-echo-v1"
+
+    openai_run = await api_client.post(
+        f"/projects/{project_id}/evaluations",
+        json={"dataset_name": "sample_contract_qa", "model": "gpt-4o-mini"},
+        headers=headers,
+    )
+    assert openai_run.status_code == 201
+    assert openai_run.json()["model"] == "gpt-4o-mini"
+    assert openai_run.json()["dataset_name"] == "sample_contract_qa"
+
+    list_response = await api_client.get(f"/projects/{project_id}/evaluations", headers=headers)
+    models = {run["model"] for run in list_response.json()}
+    assert models == {"mock-echo-v1", "gpt-4o-mini"}
+
+
+async def test_create_evaluation_run_with_unknown_model_returns_422(
+    api_client: httpx.AsyncClient, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    async with db_session_factory() as session:
+        owner = await UserRepository(session).create(email="eo5@x.com", display_name="Owner")
+        org = await OrganizationRepository(session).create(name="EV5", slug="ev5-corp")
+        await session.commit()
+    headers = _auth_headers(owner.id)
+
+    project_id = (
+        await api_client.post(
+            "/projects",
+            json={"organization_id": str(org.id), "name": "Unknown model project"},
+            headers=headers,
+        )
+    ).json()["id"]
+
+    response = await api_client.post(
+        f"/projects/{project_id}/evaluations",
+        json={"dataset_name": "sample_contract_qa", "model": "not-a-real-model"},
+        headers=headers,
+    )
+    assert response.status_code == 422

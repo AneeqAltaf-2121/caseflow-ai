@@ -16,9 +16,14 @@ import uuid
 
 from caseflow_evals import DatasetValidationError, EvaluationDataset, load_dataset
 
+from app.config import Settings
 from app.errors import NotFoundError, ValidationError
 from app.evals.dataset_paths import DatasetNotFoundError, resolve_dataset_path
-from app.integrations.generation import GenerationProvider
+from app.integrations.generation import (
+    GenerationProvider,
+    UnknownModelError,
+    get_generation_provider_by_model,
+)
 from app.models.evaluation import EvaluationRun
 from app.models.project import ProjectRole
 from app.rag.prompts import SYSTEM_PROMPT
@@ -49,14 +54,21 @@ class EvaluationRunService:
         project_service: ProjectService,
         prompt_version_service: PromptVersionService,
         generation_provider: GenerationProvider,
+        settings: Settings,
     ) -> None:
         self._repository = repository
         self._project_service = project_service
         self._prompt_version_service = prompt_version_service
         self._generation_provider = generation_provider
+        self._settings = settings
 
     async def create_run(
-        self, *, project_id: uuid.UUID, user_id: uuid.UUID, dataset_name: str
+        self,
+        *,
+        project_id: uuid.UUID,
+        user_id: uuid.UUID,
+        dataset_name: str,
+        model: str | None = None,
     ) -> EvaluationRun:
         # Grading a dataset spends real retrieval + LLM + judge calls per
         # example — same owner/editor gate as generating a report.
@@ -74,12 +86,27 @@ class EvaluationRunService:
             default_template=SYSTEM_PROMPT,
         )
 
+        # Phase 31 model comparison: an explicit `model` runs this same
+        # dataset through a different provider than whatever's globally
+        # configured — validated here (cheap: instantiating a provider
+        # doesn't call it) so an unknown model name 404s/422s immediately
+        # rather than failing the job later. The job itself
+        # (app/jobs/evaluations.py) re-resolves the provider from this
+        # stored `model` value when it actually runs.
+        if model is not None:
+            try:
+                resolved_model = get_generation_provider_by_model(model, self._settings).model
+            except UnknownModelError as exc:
+                raise ValidationError(str(exc)) from exc
+        else:
+            resolved_model = self._generation_provider.model
+
         return await self._repository.create(
             project_id=project_id,
             dataset_name=dataset.name,
             dataset_version=dataset.version,
             prompt_version_id=prompt_version.id,
-            model=self._generation_provider.model,
+            model=resolved_model,
             retriever_version=RETRIEVER_VERSION,
             created_by=user_id,
         )

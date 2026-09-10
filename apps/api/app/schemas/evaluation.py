@@ -8,6 +8,12 @@ from app.models.evaluation import EvaluationRunStatus
 
 class EvaluationRunCreate(BaseModel):
     dataset_name: str = Field(min_length=1, max_length=200)
+    # Phase 31 model comparison: omit to use the globally configured
+    # default model, or name a specific known model (see
+    # app.integrations.generation.get_generation_provider_by_model) to
+    # run this same dataset through a different one — create several
+    # runs with different `model` values to compare them.
+    model: str | None = Field(default=None, max_length=100)
 
 
 class EvaluationRunRead(BaseModel):
