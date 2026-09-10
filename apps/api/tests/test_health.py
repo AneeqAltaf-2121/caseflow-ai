@@ -2,6 +2,8 @@ from contextlib import asynccontextmanager
 
 from fastapi.testclient import TestClient
 
+from app.observability import get_latency_tracker
+
 
 def test_health_returns_ok(client: TestClient) -> None:
     response = client.get("/health")
@@ -53,3 +55,26 @@ def test_ready_returns_200_when_dependencies_are_healthy(client: TestClient) -> 
 
     assert response.status_code == 200
     assert response.json() == {"status": "ready", "checks": {"database": "ok", "redis": "ok"}}
+
+
+def test_latency_metrics_reports_requests_made_through_the_middleware(
+    client: TestClient,
+) -> None:
+    get_latency_tracker().reset()
+
+    client.get("/health")
+    client.get("/health")
+
+    response = client.get("/metrics/latency")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "GET /health" in body
+    assert body["GET /health"]["count"] == 2
+    assert body["GET /health"]["p50_ms"] >= 0
+    assert body["GET /health"]["p95_ms"] >= body["GET /health"]["p50_ms"]
+
+
+def test_latency_metrics_empty_when_no_requests_recorded() -> None:
+    get_latency_tracker().reset()
+    assert get_latency_tracker().snapshot() == {}

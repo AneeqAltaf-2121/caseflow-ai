@@ -50,6 +50,15 @@ async def process_document(
     storage: StorageBackend,
     embedding_provider: EmbeddingProvider,
 ) -> None:
+    # Phase 34: bind a trace context that every log line for this job
+    # picks up automatically, including ones emitted from deep inside the
+    # ingestion pipeline — not just the explicit job_id=... kwargs already
+    # threaded through this function's own logger calls below. Cleared
+    # (not just overwritten) first since a worker thread runs many jobs
+    # in sequence and contextvars are thread-local, not per-job.
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(job_id=str(job_id), document_id=str(document_id))
+
     async with session_factory() as session:
         job_repo = JobRepository(session)
         doc_repo = DocumentRepository(session)

@@ -82,6 +82,13 @@ async def run_evaluation(
     generation_provider: GenerationProvider,
     judge_provider: GenerationProvider,
 ) -> None:
+    # Phase 34: bind a trace context every log line for this job picks up
+    # automatically — see the matching comment in process_document.
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(
+        job_id=str(job_id), evaluation_run_id=str(evaluation_run_id)
+    )
+
     async with session_factory() as session:
         job_repo = JobRepository(session)
         run_repo = EvaluationRunRepository(session)
@@ -208,6 +215,15 @@ async def run_evaluation(
                         retrieval_config=answer.retrieval_config,
                     )
                     model_run_id = model_run.id
+                    logger.info(
+                        "model_run_recorded",
+                        model_run_id=str(model_run.id),
+                        model=model_run.model,
+                        provider=model_run.provider,
+                        latency_ms=model_run.latency_ms,
+                        estimated_cost_usd=model_run.estimated_cost_usd,
+                        example_id=example.id,
+                    )
 
                 retrieval_scores = retrieval_by_example.get(example.id)
 

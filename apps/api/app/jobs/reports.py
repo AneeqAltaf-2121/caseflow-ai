@@ -50,6 +50,11 @@ async def generate_report(
     reranker: Reranker,
     generation_provider: GenerationProvider,
 ) -> None:
+    # Phase 34: bind a trace context every log line for this job picks up
+    # automatically — see the matching comment in process_document.
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(job_id=str(job_id), report_id=str(report_id))
+
     async with session_factory() as session:
         job_repo = JobRepository(session)
         report_repo = ReportRepository(session)

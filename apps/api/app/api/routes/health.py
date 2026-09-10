@@ -1,15 +1,18 @@
-"""Liveness/readiness endpoints.
+"""Liveness/readiness/metrics endpoints.
 
 /health — process is up. Never touches dependencies; used by orchestrators
 for liveness probes.
 /ready — process can actually serve traffic (DB + Redis reachable). Used
 for readiness probes / load balancer health checks.
+/metrics/latency — Phase 34 observability: P50/P95/max request latency
+per route, from this process's in-memory rolling window (app/observability.py).
 """
 
 from fastapi import APIRouter, Request
 from sqlalchemy import text
 
 from app.errors import CaseFlowError
+from app.observability import get_latency_tracker
 
 router = APIRouter(tags=["health"])
 
@@ -47,3 +50,17 @@ async def ready(request: Request) -> dict:
         raise DependencyUnavailableError(f"Not ready: {checks}")
 
     return {"status": "ready", "checks": checks}
+
+
+@router.get("/metrics/latency")
+async def latency_metrics() -> dict:
+    snapshot = get_latency_tracker().snapshot()
+    return {
+        route: {
+            "count": s.count,
+            "p50_ms": s.p50_ms,
+            "p95_ms": s.p95_ms,
+            "max_ms": s.max_ms,
+        }
+        for route, s in snapshot.items()
+    }
