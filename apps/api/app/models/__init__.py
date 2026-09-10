@@ -10,6 +10,7 @@ from app.models.citation import Citation
 from app.models.conversation import Conversation, Message, MessageRole
 from app.models.document import Document, DocumentStatus, DocumentVersion
 from app.models.job import Job, JobStatus
+from app.models.model_run import ModelRun, ModelRunStatus
 from app.models.organization import Organization
 from app.models.project import Project, ProjectMember, ProjectRole
 from app.models.prompt_version import PromptVersion
@@ -28,6 +29,8 @@ __all__ = [
     "EMBEDDING_DIMENSIONS",
     "Job",
     "JobStatus",
+    "ModelRun",
+    "ModelRunStatus",
     "Organization",
     "Project",
     "ProjectMember",

@@ -26,6 +26,14 @@ class HybridSearchService:
         self._project_service = project_service
         self._embedding_provider = embedding_provider
 
+    @property
+    def embedding_provider(self) -> EmbeddingProvider:
+        """Exposed so callers (RetrievalService.describe_config, for
+        ModelRun.retrieval_config — Phase 23) can identify which embedding
+        model produced a given answer's context, without reaching into a
+        private attribute."""
+        return self._embedding_provider
+
     async def hybrid_search(
         self,
         *,

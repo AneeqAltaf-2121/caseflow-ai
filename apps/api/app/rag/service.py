@@ -6,11 +6,15 @@ Doesn't persist anything itself — ConversationService (Phase 21) is what
 calls this per turn and stores the result as Message/Citation rows,
 passing in a bounded slice of prior turns as `history` (see
 app/rag/history.py) so a long conversation doesn't grow every prompt
-without bound.
+without bound. RagAnswer carries everything ConversationService needs to
+record a ModelRun (Phase 23) too — latency, token counts, provider/model
+identity, and the retrieval configuration that produced its context —
+without RagService itself touching the database.
 """
 
+import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from app.integrations.generation import GenerationProvider
 from app.rag.citations import extract_cited_source_numbers
@@ -20,6 +24,7 @@ from app.rag.prompts import SYSTEM_PROMPT, build_user_prompt
 from app.services.retrieval_service import RetrievalService
 
 DEFAULT_TOP_K = 6
+DEFAULT_TEMPERATURE = 0.0
 
 
 @dataclass(frozen=True)
@@ -38,6 +43,9 @@ class RagAnswer:
     citations: list[Citation]
     sources_considered: int
     model: str
+    # "none" when Phase 20's zero-evidence short-circuit fired — no
+    # generation call was actually made, so there's no real provider.
+    provider: str
     # True when the answer shouldn't be trusted as evidence-backed: either
     # nothing was retrieved at all, or the model produced zero citations
     # despite having sources to work with (see app/rag/grounding.py for
@@ -46,6 +54,11 @@ class RagAnswer:
     # a warning flag for the caller/UI, not a silent rewrite of what the
     # model said.
     insufficient_evidence: bool
+    input_tokens: int
+    output_tokens: int
+    latency_ms: int
+    temperature: float
+    retrieval_config: dict = field(default_factory=dict)
 
 
 class RagService:
@@ -69,6 +82,7 @@ class RagService:
             project_id=project_id, user_id=user_id, query=query, top_k=top_k
         )
         chunks = [result.chunk for result in results]
+        retrieval_config = {"top_k": top_k, **self._retrieval_service.describe_config()}
 
         if not chunks:
             # Nothing to answer from — don't spend a generation call
@@ -78,17 +92,26 @@ class RagService:
                 citations=[],
                 sources_considered=0,
                 model="none",
+                provider="none",
                 insufficient_evidence=True,
+                input_tokens=0,
+                output_tokens=0,
+                latency_ms=0,
+                temperature=DEFAULT_TEMPERATURE,
+                retrieval_config=retrieval_config,
             )
 
         context = build_context(chunks)
+        start = time.perf_counter()
         generation = await self._generation_provider.generate(
             # A caller (ConversationService, Phase 22) may supply the
             # project's active PromptVersion.template here instead of the
             # hardcoded default — see app/services/prompt_version_service.py.
             system_prompt=system_prompt or SYSTEM_PROMPT,
             user_prompt=build_user_prompt(question=query, context=context, history=history),
+            temperature=DEFAULT_TEMPERATURE,
         )
+        latency_ms = int((time.perf_counter() - start) * 1000)
 
         cited_numbers = extract_cited_source_numbers(generation.text, source_count=len(chunks))
         citations = [
@@ -108,5 +131,11 @@ class RagService:
             citations=citations,
             sources_considered=len(chunks),
             model=generation.model,
+            provider=type(self._generation_provider).__name__,
             insufficient_evidence=len(citations) == 0,
+            input_tokens=generation.input_tokens,
+            output_tokens=generation.output_tokens,
+            latency_ms=latency_ms,
+            temperature=DEFAULT_TEMPERATURE,
+            retrieval_config=retrieval_config,
         )
