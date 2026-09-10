@@ -72,11 +72,14 @@ A link from an assistant Message to the DocumentChunk(s) that ground it.
   source.
 
 ### PromptVersion
-An immutable, named/versioned prompt template. Prompts are never edited in
-place — a change is a new version (`rag_answer_v2`, etc.), enabling
-regression comparisons.
+An immutable, named/versioned prompt template, owned by a Project. Prompts
+are never edited in place — a change is a new version (`rag_answer_v2`,
+etc.), enabling regression comparisons. At most one version per
+`(project_id, name)` is `is_active` at a time — that's the version routes
+actually use.
 
-- `id`, `name`, `version`, `template`, `created_by`, `created_at`
+- `id`, `project_id`, `name`, `version`, `template`, `is_active`,
+  `created_by`, `created_at`
 
 ### ModelRun
 A record of a single LLM invocation, for cost/latency/observability and

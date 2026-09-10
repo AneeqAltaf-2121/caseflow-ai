@@ -16,6 +16,7 @@ from app.rag.service import RagService
 from app.repositories.chunk_repository import DocumentChunkRepository
 from app.repositories.conversation_repository import ConversationRepository
 from app.repositories.project_repository import ProjectRepository
+from app.repositories.prompt_version_repository import PromptVersionRepository
 from app.schemas.conversation import (
     CitationRead,
     ConversationCreate,
@@ -33,6 +34,7 @@ from app.services.conversation_service import (
 )
 from app.services.hybrid_search_service import HybridSearchService
 from app.services.project_service import ProjectService
+from app.services.prompt_version_service import PromptVersionService
 from app.services.retrieval_service import RetrievalService
 
 router = APIRouter(prefix="/projects/{project_id}/conversations", tags=["conversations"])
@@ -49,8 +51,14 @@ def _service(
     )
     retrieval_service = RetrievalService(hybrid_service, reranker)
     rag_service = RagService(retrieval_service, generation_provider)
+    prompt_version_service = PromptVersionService(
+        PromptVersionRepository(db), ProjectService(ProjectRepository(db))
+    )
     return ConversationService(
-        ConversationRepository(db), ProjectService(ProjectRepository(db)), rag_service
+        ConversationRepository(db),
+        ProjectService(ProjectRepository(db)),
+        rag_service,
+        prompt_version_service,
     )
 
 
