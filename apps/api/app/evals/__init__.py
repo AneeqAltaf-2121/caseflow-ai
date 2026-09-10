@@ -4,12 +4,12 @@
 
 Dataset format (Phase 25) and retrieval metrics (Phase 26) re-exported
 here for convenience. `retrieval_evaluation.evaluate_retrieval` (Phase
-26) lives in this package rather than packages/evals because it needs a
-live RetrievalService/DB session for a real project. Deterministic +
-LLM-as-a-judge answer graders and evaluation-run persistence/
-orchestration land in later phases (27-29), at which point this package
-grows routes/services/repositories the same as every other app/
-subpackage.
+26) and `deterministic_checks.run_deterministic_checks` (Phase 27) live
+in this package rather than packages/evals because both need a live
+DB session for a real project. LLM-as-a-judge answer graders and
+evaluation-run persistence/orchestration land in later phases (28-29),
+at which point this package grows routes/services/repositories the same
+as every other app/ subpackage.
 """
 
 from caseflow_evals import (
@@ -24,6 +24,11 @@ from caseflow_evals import (
     save_dataset,
 )
 
+from app.evals.deterministic_checks import (
+    CitationCheckResult,
+    DeterministicCheckResult,
+    run_deterministic_checks,
+)
 from app.evals.retrieval_evaluation import (
     RetrievalEvaluationResult,
     RetrievalExampleResult,
@@ -43,4 +48,7 @@ __all__ = [
     "RetrievalEvaluationResult",
     "RetrievalExampleResult",
     "evaluate_retrieval",
+    "CitationCheckResult",
+    "DeterministicCheckResult",
+    "run_deterministic_checks",
 ]
