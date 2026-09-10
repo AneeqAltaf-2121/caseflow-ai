@@ -7,6 +7,7 @@ import uuid
 
 from fastapi import APIRouter
 
+from app.cache import get_cache
 from app.dependencies import (
     CurrentUserIdDep,
     DbSessionDep,
@@ -61,7 +62,10 @@ async def hybrid_search(
     embedding_provider: EmbeddingProviderDep,
 ) -> list[HybridSearchResultRead]:
     service = HybridSearchService(
-        DocumentChunkRepository(db), ProjectService(ProjectRepository(db)), embedding_provider
+        DocumentChunkRepository(db),
+        ProjectService(ProjectRepository(db)),
+        embedding_provider,
+        get_cache(),
     )
     results = await service.hybrid_search(
         project_id=project_id, user_id=current_user_id, query=payload.query, limit=payload.limit
@@ -93,7 +97,10 @@ async def reranked_search(
     reranker: RerankerDep,
 ) -> list[SearchResultRead]:
     hybrid_service = HybridSearchService(
-        DocumentChunkRepository(db), ProjectService(ProjectRepository(db)), embedding_provider
+        DocumentChunkRepository(db),
+        ProjectService(ProjectRepository(db)),
+        embedding_provider,
+        get_cache(),
     )
     service = RetrievalService(hybrid_service, reranker)
     results = await service.retrieve(

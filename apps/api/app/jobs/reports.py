@@ -21,6 +21,7 @@ import dramatiq
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.cache import get_cache
 from app.config import get_settings
 from app.database import create_engine, create_session_factory
 from app.integrations.embeddings import EmbeddingProvider, get_embedding_provider
@@ -73,6 +74,7 @@ async def generate_report(
             DocumentChunkRepository(session),
             ProjectService(ProjectRepository(session)),
             embedding_provider,
+            get_cache(),
         )
         rag_service = RagService(RetrievalService(hybrid_service, reranker), generation_provider)
 

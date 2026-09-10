@@ -4,13 +4,24 @@ project_id/user_id columns) by day, model, and user for a project.
 Covers both chat (ConversationService) and evaluation-run (Phase 29)
 generation calls — every ModelRun-creating call site feeds the same
 aggregate, regardless of which feature spent the money.
+
+Phase 33: the aggregate itself is cached (optional `cache`, same
+opt-in-via-None default as HybridSearchService) — the underlying GROUP BY
+gets more expensive as ModelRun grows, and unlike retrieval results this
+is exactly the "eval aggregates" caching the phase spec calls out. A
+short TTL (60s, vs. retrieval's 5 minutes) reflects that spend changes
+more often than a project's retrieval index does.
 """
 
+import json
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 
+from app.cache import Cache, cache_key
 from app.repositories.model_run_repository import CostAggregateRow, ModelRunRepository
 from app.services.project_service import ProjectService
+
+CACHE_TTL_SECONDS = 60
 
 
 @dataclass(frozen=True)
@@ -46,14 +57,36 @@ def _summarize(project_id: uuid.UUID, rows: list[CostAggregateRow]) -> CostSumma
 
 
 class CostService:
-    def __init__(self, repository: ModelRunRepository, project_service: ProjectService) -> None:
+    def __init__(
+        self,
+        repository: ModelRunRepository,
+        project_service: ProjectService,
+        cache: Cache | None = None,
+    ) -> None:
         self._repository = repository
         self._project_service = project_service
+        self._cache = cache
 
     async def get_cost_summary(self, *, project_id: uuid.UUID, user_id: uuid.UUID) -> CostSummary:
         # Viewing spend is a read — any project member, not just
         # owner/editor, per the same membership check other read
         # endpoints (list_reports, list_runs) use.
         await self._project_service.get_project_for_user(project_id=project_id, user_id=user_id)
+
+        key = cache_key("cost_summary", "v1", str(project_id))
+        if self._cache is not None:
+            cached = await self._cache.get(key)
+            if cached is not None:
+                rows = [
+                    CostAggregateRow(**{**row, "user_id": uuid.UUID(row["user_id"])})
+                    for row in json.loads(cached)
+                ]
+                return _summarize(project_id, rows)
+
         rows = await self._repository.aggregate_costs_for_project(project_id)
+
+        if self._cache is not None:
+            serializable = [{**asdict(row), "user_id": str(row.user_id)} for row in rows]
+            await self._cache.set(key, json.dumps(serializable), ttl_seconds=CACHE_TTL_SECONDS)
+
         return _summarize(project_id, rows)

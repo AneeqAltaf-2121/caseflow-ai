@@ -5,6 +5,7 @@ import uuid
 
 from fastapi import APIRouter
 
+from app.cache import get_cache
 from app.dependencies import CurrentUserIdDep, DbSessionDep
 from app.repositories.model_run_repository import ModelRunRepository
 from app.repositories.project_repository import ProjectRepository
@@ -16,7 +17,7 @@ router = APIRouter(prefix="/projects/{project_id}/costs", tags=["costs"])
 
 
 def _service(db: DbSessionDep) -> CostService:
-    return CostService(ModelRunRepository(db), ProjectService(ProjectRepository(db)))
+    return CostService(ModelRunRepository(db), ProjectService(ProjectRepository(db)), get_cache())
 
 
 @router.get("", response_model=CostSummaryRead)
