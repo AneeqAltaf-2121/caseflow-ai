@@ -66,6 +66,20 @@ class DocumentRepository:
         await self._session.flush()
         return version
 
+    async def get_by_checksum(
+        self, *, project_id: uuid.UUID, checksum_sha256: str
+    ) -> Document | None:
+        """Phase 35 duplicate-upload detection: is a document with this
+        exact content (by its *current* version's checksum) already in
+        this project? Used to reject an accidental double-submit before
+        it spends a storage write and a duplicate ingestion job."""
+        result = await self._session.execute(
+            select(Document).where(
+                Document.project_id == project_id, Document.checksum_sha256 == checksum_sha256
+            )
+        )
+        return result.scalars().first()
+
     async def get_by_id(self, document_id: uuid.UUID) -> Document | None:
         result = await self._session.execute(
             select(Document)

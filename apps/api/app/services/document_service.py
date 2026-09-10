@@ -12,9 +12,9 @@ import uuid
 from dataclasses import dataclass
 
 from app.config import Settings
-from app.errors import NotFoundError, ValidationError
+from app.errors import ConflictError, NotFoundError, ValidationError
 from app.integrations.storage import StorageBackend
-from app.models.document import Document
+from app.models.document import Document, DocumentStatus
 from app.models.project import ProjectRole
 from app.repositories.document_repository import DocumentRepository
 from app.services.project_service import ProjectService
@@ -79,6 +79,22 @@ class DocumentService:
         self._validate(file, settings=settings)
 
         checksum = hashlib.sha256(file.data).hexdigest()
+
+        # Phase 35 reliability: an accidental double-submit (double-click,
+        # a retried request that actually succeeded the first time)
+        # shouldn't spend a second storage write and a second ingestion
+        # job on content already in this project. A prior FAILED upload
+        # doesn't block a retry — it's not really "the same document" in
+        # any state a user would recognize as already there.
+        existing = await self._repository.get_by_checksum(
+            project_id=project_id, checksum_sha256=checksum
+        )
+        if existing is not None and existing.status != DocumentStatus.FAILED:
+            raise ConflictError(
+                f"A document with this exact content already exists in this project "
+                f"({existing.filename!r}, id={existing.id})."
+            )
+
         storage_key = f"projects/{project_id}/{uuid.uuid4().hex}/{file.filename}"
 
         await self._storage.put(key=storage_key, data=file.data)
