@@ -44,6 +44,15 @@ export interface ProjectDocument {
   created_at: string;
 }
 
+export interface SearchResult {
+  chunk_id: string;
+  document_id: string;
+  document_filename: string;
+  page_number: number;
+  text: string;
+  score: number;
+}
+
 export interface TokenPair {
   access_token: string;
   refresh_token: string;

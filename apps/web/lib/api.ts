@@ -5,6 +5,7 @@ import type {
   Project,
   ProjectDocument,
   ProjectMember,
+  SearchResult,
   TokenPair,
   User,
 } from "./types";
@@ -150,6 +151,13 @@ export const api = {
   },
   documentDownloadUrl: (projectId: string, documentId: string) =>
     `${API_URL}/projects/${projectId}/documents/${documentId}/download`,
+
+  // --- search ---
+  semanticSearch: (projectId: string, query: string, limit = 10) =>
+    request<SearchResult[]>(`/projects/${projectId}/search`, {
+      method: "POST",
+      body: { query, limit },
+    }),
 };
 
 export { API_URL };
