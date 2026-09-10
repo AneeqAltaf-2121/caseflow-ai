@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.jwt import TokenType, decode_token
 from app.config import Settings, get_settings
 from app.errors import UnauthorizedError
+from app.integrations.storage import StorageBackend
 
 
 async def get_db(request: Request) -> AsyncGenerator[AsyncSession, None]:
@@ -54,3 +55,12 @@ async def get_current_user_id(
 
 
 CurrentUserIdDep = Annotated[uuid.UUID, Depends(get_current_user_id)]
+
+
+async def get_storage(request: Request) -> StorageBackend:
+    """The storage backend created once at startup (see app/main.py
+    lifespan) — local disk or S3 depending on `settings.storage_backend`."""
+    return request.app.state.storage_backend  # type: ignore[no-any-return]
+
+
+StorageDep = Annotated[StorageBackend, Depends(get_storage)]

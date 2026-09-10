@@ -6,7 +6,7 @@ what Alembic's `env.py` targets for autogenerate/offline SQL rendering.
 
 from app.models.audit_event import AuditEvent
 from app.models.conversation import Conversation, Message, MessageRole
-from app.models.document import Document, DocumentStatus
+from app.models.document import Document, DocumentStatus, DocumentVersion
 from app.models.job import Job, JobStatus
 from app.models.organization import Organization
 from app.models.project import Project, ProjectMember, ProjectRole
@@ -19,6 +19,7 @@ __all__ = [
     "MessageRole",
     "Document",
     "DocumentStatus",
+    "DocumentVersion",
     "Job",
     "JobStatus",
     "Organization",
