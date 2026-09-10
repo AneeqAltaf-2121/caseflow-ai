@@ -11,12 +11,13 @@ import { ErrorState } from "@/components/ErrorState";
 import { EmptyState } from "@/components/EmptyState";
 import { Skeleton, SkeletonList } from "@/components/Skeleton";
 
-type Mode = "semantic" | "keyword" | "hybrid";
+type Mode = "semantic" | "keyword" | "hybrid" | "rerank";
 
 const MODES: { value: Mode; label: string; description: string }[] = [
   { value: "semantic", label: "Semantic", description: "Vector similarity — meaning, not exact words." },
   { value: "keyword", label: "Keyword", description: "BM25 — exact terms and terminology." },
   { value: "hybrid", label: "Hybrid", description: "Both, combined by reciprocal rank fusion." },
+  { value: "rerank", label: "Reranked", description: "Hybrid's top results, narrowed by phrase-match reranking." },
 ];
 
 export default function SearchPage({ params }: { params: Promise<{ id: string }> }) {
@@ -40,7 +41,8 @@ export default function SearchPage({ params }: { params: Promise<{ id: string }>
       const trimmed = query.trim();
       if (mode === "semantic") setResults(await api.semanticSearch(id, trimmed));
       else if (mode === "keyword") setResults(await api.keywordSearch(id, trimmed));
-      else setResults(await api.hybridSearch(id, trimmed));
+      else if (mode === "hybrid") setResults(await api.hybridSearch(id, trimmed));
+      else setResults(await api.rerankSearch(id, trimmed));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Search failed.");
       setResults(null);

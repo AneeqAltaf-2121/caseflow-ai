@@ -169,6 +169,11 @@ export const api = {
       method: "POST",
       body: { query, limit },
     }),
+  rerankSearch: (projectId: string, query: string, limit = 6) =>
+    request<SearchResult[]>(`/projects/${projectId}/search/rerank`, {
+      method: "POST",
+      body: { query, limit },
+    }),
 };
 
 export { API_URL };
