@@ -23,6 +23,18 @@ class DocumentChunkRepository:
     async def get_by_id(self, chunk_id: uuid.UUID) -> DocumentChunk | None:
         return await self._session.get(DocumentChunk, chunk_id)
 
+    async def get_by_id_with_document(self, chunk_id: uuid.UUID) -> DocumentChunk | None:
+        """Like get_by_id, but with `.document` eager-loaded — used by
+        Phase 27's deterministic citation checks, which need to confirm a
+        cited chunk's document actually belongs to the project being
+        evaluated."""
+        result = await self._session.execute(
+            select(DocumentChunk)
+            .where(DocumentChunk.id == chunk_id)
+            .options(selectinload(DocumentChunk.document))
+        )
+        return result.scalar_one_or_none()
+
     async def list_for_document(self, document_id: uuid.UUID) -> list[DocumentChunk]:
         result = await self._session.execute(
             select(DocumentChunk)
