@@ -48,3 +48,7 @@ class ProjectMemberRead(BaseModel):
 class ProjectMemberInvite(BaseModel):
     email: str = Field(min_length=1, max_length=320)
     role: ProjectRole = ProjectRole.VIEWER
+
+
+class ProjectMemberRoleUpdate(BaseModel):
+    role: ProjectRole

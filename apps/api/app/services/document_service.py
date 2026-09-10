@@ -11,11 +11,14 @@ import hashlib
 import uuid
 from dataclasses import dataclass
 
+from app.audit import AuditAction, AuditTargetType
 from app.config import Settings
 from app.errors import ConflictError, NotFoundError, ValidationError
 from app.integrations.storage import StorageBackend
 from app.models.document import Document, DocumentStatus
 from app.models.project import ProjectRole
+from app.repositories.audit_event_repository import AuditEventRepository
+from app.repositories.chunk_repository import DocumentChunkRepository
 from app.repositories.document_repository import DocumentRepository
 from app.services.project_service import ProjectService
 
@@ -46,10 +49,17 @@ class DocumentService:
         repository: DocumentRepository,
         project_service: ProjectService,
         storage: StorageBackend,
+        audit_repository: AuditEventRepository | None = None,
+        chunk_repository: DocumentChunkRepository | None = None,
     ) -> None:
         self._repository = repository
         self._project_service = project_service
         self._storage = storage
+        self._audit_repository = audit_repository
+        # Only needed by delete_document (clears a deleted document's
+        # chunks before the document row itself goes) — optional/None
+        # default so upload-only callers don't need to construct one.
+        self._chunk_repository = chunk_repository
 
     def _validate(self, file: UploadedFile, *, settings: Settings) -> None:
         if file.content_type not in ALLOWED_CONTENT_TYPES:
@@ -99,7 +109,7 @@ class DocumentService:
 
         await self._storage.put(key=storage_key, data=file.data)
         try:
-            return await self._repository.create(
+            document = await self._repository.create(
                 project_id=project_id,
                 filename=file.filename,
                 content_type=file.content_type,
@@ -111,6 +121,60 @@ class DocumentService:
         except Exception:
             await self._storage.delete(key=storage_key)
             raise
+
+        if self._audit_repository is not None:
+            await self._audit_repository.create(
+                project_id=project_id,
+                actor_user_id=user_id,
+                action=AuditAction.DOCUMENT_UPLOADED,
+                target_type=AuditTargetType.DOCUMENT,
+                target_id=document.id,
+                metadata={"filename": document.filename, "size_bytes": document.size_bytes},
+            )
+        return document
+
+    async def delete_document(
+        self, *, project_id: uuid.UUID, document_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        """Permanently delete a document: every DocumentChunk it produced
+        (so nothing dangling can still be retrieved), every version's
+        bytes in storage, then the Document row itself (which ORM-cascades
+        its DocumentVersion rows — see Document.versions' cascade). Same
+        chunk-clearing approach as re-processing (see
+        DocumentChunkRepository.delete_for_document) — this project
+        doesn't yet guard against deleting a document whose chunks are
+        already cited elsewhere (Message/ReportCitation); that citation
+        history would be left pointing at a chunk id that no longer
+        resolves. Acceptable for a portfolio project's scope, called out
+        here rather than silently assumed correct.
+        """
+        await self._project_service.require_role(
+            project_id=project_id,
+            user_id=user_id,
+            allowed={ProjectRole.OWNER, ProjectRole.EDITOR},
+        )
+        document = await self.get_document_for_user(
+            project_id=project_id, document_id=document_id, user_id=user_id
+        )
+
+        if self._chunk_repository is not None:
+            await self._chunk_repository.delete_for_document(document_id)
+
+        for version in document.versions:
+            await self._storage.delete(key=version.storage_key)
+
+        filename = document.filename
+        await self._repository.delete(document)
+
+        if self._audit_repository is not None:
+            await self._audit_repository.create(
+                project_id=project_id,
+                actor_user_id=user_id,
+                action=AuditAction.DOCUMENT_DELETED,
+                target_type=AuditTargetType.DOCUMENT,
+                target_id=document_id,
+                metadata={"filename": filename},
+            )
 
     async def replace_document(
         self,

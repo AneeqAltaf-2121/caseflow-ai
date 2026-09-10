@@ -96,6 +96,10 @@ class DocumentRepository:
         )
         return list(result.scalars().all())
 
+    async def delete(self, document: Document) -> None:
+        await self._session.delete(document)
+        await self._session.flush()
+
     async def update_status(self, document: Document, status: DocumentStatus) -> Document:
         document.status = status
         await self._session.flush()
