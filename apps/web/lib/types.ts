@@ -167,6 +167,66 @@ export interface ReportDetail extends Report {
   sections: ReportSection[];
 }
 
+export type EvaluationRunStatus = "queued" | "running" | "succeeded" | "failed";
+
+export interface EvaluationRun {
+  id: string;
+  project_id: string;
+  dataset_name: string;
+  dataset_version: number;
+  prompt_version_id: string | null;
+  model: string;
+  retriever_version: string;
+  status: EvaluationRunStatus;
+  error: string | null;
+  created_by: string;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface EvaluationGraderDetail {
+  grader: string;
+  score: number;
+  reason: string;
+  failures: string[];
+  judge_model: string;
+  prompt_version: string;
+  temperature: number;
+}
+
+export interface EvaluationResult {
+  id: string;
+  example_id: string;
+  question: string;
+  generated_answer: string;
+  expected_answer: string | null;
+  faithfulness_score: number | null;
+  relevance_score: number | null;
+  completeness_score: number | null;
+  citation_support_score: number | null;
+  citation_correct: boolean;
+  judge_reason: string | null;
+  recall_at_k: number | null;
+  precision_at_k: number | null;
+  mrr: number | null;
+  ndcg_at_k: number | null;
+  latency_ms: number;
+  cost_usd: number;
+  model_run_id: string | null;
+  grader_details: {
+    faithfulness: EvaluationGraderDetail;
+    relevance: EvaluationGraderDetail;
+    completeness: EvaluationGraderDetail | null;
+    citation_support: EvaluationGraderDetail;
+    deterministic_failures: string[];
+  };
+}
+
+export interface EvaluationRunDetail extends EvaluationRun {
+  results: EvaluationResult[];
+}
+
 export interface TokenPair {
   access_token: string;
   refresh_token: string;

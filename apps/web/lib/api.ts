@@ -5,6 +5,8 @@ import type {
   AskAnswer,
   Conversation,
   ConversationDetail,
+  EvaluationRun,
+  EvaluationRunDetail,
   HybridSearchResult,
   PostMessageResponse,
   Project,
@@ -223,6 +225,17 @@ export const api = {
   listReports: (projectId: string) => request<Report[]>(`/projects/${projectId}/reports`),
   getReport: (projectId: string, reportId: string) =>
     request<ReportDetail>(`/projects/${projectId}/reports/${reportId}`),
+
+  // --- evaluations ---
+  createEvaluationRun: (projectId: string, datasetName: string) =>
+    request<EvaluationRun>(`/projects/${projectId}/evaluations`, {
+      method: "POST",
+      body: { dataset_name: datasetName },
+    }),
+  listEvaluationRuns: (projectId: string) =>
+    request<EvaluationRun[]>(`/projects/${projectId}/evaluations`),
+  getEvaluationRun: (projectId: string, evaluationRunId: string) =>
+    request<EvaluationRunDetail>(`/projects/${projectId}/evaluations/${evaluationRunId}`),
 };
 
 export { API_URL };
