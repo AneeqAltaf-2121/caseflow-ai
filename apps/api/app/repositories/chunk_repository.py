@@ -39,6 +39,17 @@ class DocumentChunkRepository:
         )
         return list(result.scalars().all())
 
+    async def list_for_project(self, project_id: uuid.UUID) -> list[DocumentChunk]:
+        """Every chunk in a project regardless of embedding status — used
+        by keyword search (Phase 15), which doesn't need `embedding`."""
+        result = await self._session.execute(
+            select(DocumentChunk)
+            .join(Document, Document.id == DocumentChunk.document_id)
+            .where(Document.project_id == project_id)
+            .options(selectinload(DocumentChunk.document))
+        )
+        return list(result.scalars().all())
+
     async def list_unembedded(self, *, limit: int = 100) -> list[DocumentChunk]:
         """Chunks awaiting the embedding pipeline (Phase 13)."""
         result = await self._session.execute(
