@@ -8,6 +8,8 @@ import type {
   CostSummary,
   EvaluationRun,
   EvaluationRunDetail,
+  HumanReview,
+  HumanReviewStatus,
   HybridSearchResult,
   PostMessageResponse,
   Project,
@@ -240,6 +242,26 @@ export const api = {
 
   // --- costs ---
   getCostSummary: (projectId: string) => request<CostSummary>(`/projects/${projectId}/costs`),
+
+  // --- human review ---
+  flagMessageForReview: (projectId: string, messageId: string) =>
+    request<HumanReview>(`/projects/${projectId}/reviews`, {
+      method: "POST",
+      body: { message_id: messageId },
+    }),
+  listReviews: (projectId: string, status?: HumanReviewStatus) =>
+    request<HumanReview[]>(
+      `/projects/${projectId}/reviews${status ? `?status=${status}` : ""}`
+    ),
+  submitReviewDecision: (
+    projectId: string,
+    reviewId: string,
+    decision: { status: HumanReviewStatus; corrected_answer?: string; reason?: string }
+  ) =>
+    request<HumanReview>(`/projects/${projectId}/reviews/${reviewId}`, {
+      method: "PATCH",
+      body: decision,
+    }),
 };
 
 export { API_URL };

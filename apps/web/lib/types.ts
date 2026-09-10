@@ -248,6 +248,22 @@ export interface CostSummary {
   by_user: Record<string, number>;
 }
 
+export type HumanReviewStatus = "needs_review" | "approved" | "rejected" | "corrected";
+
+export interface HumanReview {
+  id: string;
+  project_id: string;
+  message_id: string;
+  status: HumanReviewStatus;
+  flagged_by: string;
+  reviewer_id: string | null;
+  reviewed_at: string | null;
+  original_answer: string;
+  corrected_answer: string | null;
+  reason: string | null;
+  created_at: string;
+}
+
 export interface TokenPair {
   access_token: string;
   refresh_token: string;

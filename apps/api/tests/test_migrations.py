@@ -38,6 +38,7 @@ EXPECTED_TABLES = {
     "messages",
     "jobs",
     "audit_events",
+    "human_reviews",
     "alembic_version",
 }
 

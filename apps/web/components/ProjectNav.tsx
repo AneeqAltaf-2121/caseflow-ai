@@ -10,6 +10,7 @@ const TABS = [
   { segment: "chat", label: "Chat" },
   { segment: "reports", label: "Reports" },
   { segment: "evaluations", label: "Evaluations" },
+  { segment: "reviews", label: "Reviews" },
 ];
 
 export function ProjectNav({ projectId }: { projectId: string }) {
