@@ -12,6 +12,7 @@ from app.models.types import created_at_column, updated_at_column, uuid_pk
 
 if TYPE_CHECKING:
     from app.models.citation import Citation
+    from app.models.model_run import ModelRun
     from app.models.prompt_version import PromptVersion
 
 
@@ -45,9 +46,10 @@ class Conversation(Base):
 class Message(Base):
     """A single turn in a conversation.
 
-    `prompt_version_id` is only set on ASSISTANT messages (a USER message
-    wasn't generated from a prompt template). `model_run_id` is added once
-    ModelRun exists (Phase 23).
+    `prompt_version_id`/`model_run_id` are only set on ASSISTANT messages
+    (a USER message wasn't generated from a prompt template or an LLM
+    call) — and only when a generation call actually happened (Phase 20's
+    zero-evidence short-circuit produces neither).
     """
 
     __tablename__ = "messages"
@@ -63,6 +65,9 @@ class Message(Base):
     prompt_version_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("prompt_versions.id", ondelete="SET NULL"), nullable=True
     )
+    model_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("model_runs.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = created_at_column()
 
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")
@@ -72,6 +77,7 @@ class Message(Base):
         order_by="Citation.source_number",
     )
     prompt_version: Mapped["PromptVersion | None"] = relationship()
+    model_run: Mapped["ModelRun | None"] = relationship()
 
     def __repr__(self) -> str:
         return f"<Message id={self.id} role={self.role}>"

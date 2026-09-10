@@ -17,10 +17,23 @@ class RerankedResult:
     score: float
 
 
+RETRIEVER_VERSION = "hybrid_rrf_v1"  # bump if fusion/candidate-limit logic changes meaningfully
+
+
 class RetrievalService:
     def __init__(self, hybrid_search_service: HybridSearchService, reranker: Reranker) -> None:
         self._hybrid_search_service = hybrid_search_service
         self._reranker = reranker
+
+    def describe_config(self) -> dict:
+        """Identifies which retriever/reranker/embedding-model combination
+        produced a result set — recorded on ModelRun.retrieval_config
+        (Phase 23) so a run's context is reproducible/comparable later."""
+        return {
+            "retriever_version": RETRIEVER_VERSION,
+            "embedding_provider": type(self._hybrid_search_service.embedding_provider).__name__,
+            "reranker": type(self._reranker).__name__,
+        }
 
     async def retrieve(
         self, *, project_id: uuid.UUID, user_id: uuid.UUID, query: str, top_k: int = DEFAULT_TOP_K

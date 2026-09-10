@@ -85,6 +85,16 @@ async def test_answer_question_returns_valid_citation(db_session: AsyncSession) 
     assert answer.citations[0].document_filename == "contract.txt"
     assert answer.citations[0].page_number == 1
     assert answer.insufficient_evidence is False
+    # Phase 23: everything ConversationService needs to record a ModelRun.
+    assert answer.provider == "MockGenerationProvider"
+    assert answer.input_tokens > 0
+    assert answer.output_tokens > 0
+    assert answer.latency_ms >= 0
+    assert answer.temperature == 0.0
+    assert answer.retrieval_config["top_k"] == 6
+    assert answer.retrieval_config["retriever_version"] == "hybrid_rrf_v1"
+    assert answer.retrieval_config["reranker"] == "MockReranker"
+    assert answer.retrieval_config["embedding_provider"] == "LocalEmbeddingProvider"
 
 
 async def test_answer_with_no_citations_in_model_output_is_flagged_insufficient(
@@ -134,3 +144,10 @@ async def test_answer_question_with_no_matching_documents(db_session: AsyncSessi
     # is returned directly rather than the mock's configured response.
     assert answer.answer == INSUFFICIENT_EVIDENCE_MESSAGE
     assert answer.model == "none"
+    assert answer.provider == "none"
+    assert answer.input_tokens == 0
+    assert answer.output_tokens == 0
+    assert answer.latency_ms == 0
+    # Retrieval config is still recorded even when nothing was found —
+    # useful for diagnosing why a query came up empty.
+    assert answer.retrieval_config["top_k"] == 6

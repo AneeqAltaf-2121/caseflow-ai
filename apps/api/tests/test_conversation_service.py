@@ -11,6 +11,7 @@ from app.rag.service import RagService
 from app.repositories.chunk_repository import DocumentChunkRepository
 from app.repositories.conversation_repository import ConversationRepository
 from app.repositories.document_repository import DocumentRepository
+from app.repositories.model_run_repository import ModelRunRepository
 from app.repositories.organization_repository import OrganizationRepository
 from app.repositories.project_repository import ProjectRepository
 from app.repositories.prompt_version_repository import PromptVersionRepository
@@ -87,6 +88,7 @@ async def _seed(db_session: AsyncSession, canned_response: str = "The term is 90
         ProjectService(ProjectRepository(db_session)),
         rag_service,
         prompt_version_service,
+        ModelRunRepository(db_session),
     )
     return service, owner, viewer, project
 
@@ -134,6 +136,19 @@ async def test_post_message_persists_user_and_assistant_messages_with_citations(
     assert result.assistant_message.prompt_version_id is not None
     assert result.user_message.prompt_version_id is None
 
+    # Phase 23: a real generation call happened, so a ModelRun was created
+    # and credited to the assistant message (never the user's message).
+    assert result.assistant_message.model_run_id is not None
+    assert result.user_message.model_run_id is None
+    model_run = await ModelRunRepository(db_session).get_by_id(
+        result.assistant_message.model_run_id
+    )
+    assert model_run is not None
+    assert model_run.model == "mock-echo-v1"
+    assert model_run.provider == "MockGenerationProvider"
+    assert model_run.prompt_version_id == result.assistant_message.prompt_version_id
+    assert model_run.retrieval_config["top_k"] == 6
+
     # Simulates a fresh request/session: without this, the `conversation`
     # object already in this session's identity map (loaded once above,
     # before these messages existed) would keep serving its stale,
@@ -146,6 +161,47 @@ async def test_post_message_persists_user_and_assistant_messages_with_citations(
     assert len(reloaded.messages) == 2
     assert len(reloaded.messages[1].citations) == 1
     assert reloaded.messages[1].citations[0].document.filename == "contract.txt"
+
+
+async def test_post_message_with_no_evidence_creates_no_model_run(db_session: AsyncSession) -> None:
+    owner = await UserRepository(db_session).create(email="empty@x.com", display_name="Empty")
+    org = await OrganizationRepository(db_session).create(name="Empty", slug="empty")
+    project = await ProjectService(ProjectRepository(db_session)).create_project(
+        organization_id=org.id, name="Empty project", description=None, created_by=owner.id
+    )
+    await db_session.commit()
+
+    embedder = LocalEmbeddingProvider(dimensions=32)
+    hybrid_service = HybridSearchService(
+        DocumentChunkRepository(db_session), ProjectService(ProjectRepository(db_session)), embedder
+    )
+    retrieval_service = RetrievalService(hybrid_service, MockReranker())
+    rag_service = RagService(retrieval_service, MockGenerationProvider())
+    prompt_version_service = PromptVersionService(
+        PromptVersionRepository(db_session), ProjectService(ProjectRepository(db_session))
+    )
+    service = ConversationService(
+        ConversationRepository(db_session),
+        ProjectService(ProjectRepository(db_session)),
+        rag_service,
+        prompt_version_service,
+        ModelRunRepository(db_session),
+    )
+
+    conversation = await service.create_conversation(project_id=project.id, user_id=owner.id)
+    await db_session.commit()
+
+    result = await service.post_message(
+        conversation_id=conversation.id,
+        project_id=project.id,
+        user_id=owner.id,
+        content="anything",
+    )
+    await db_session.commit()
+
+    assert result.sources_considered == 0
+    assert result.assistant_message.model_run_id is None
+    assert result.assistant_message.prompt_version_id is None
 
 
 async def test_post_message_uses_bounded_history_on_followups(db_session: AsyncSession) -> None:

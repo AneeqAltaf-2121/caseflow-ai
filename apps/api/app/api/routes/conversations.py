@@ -15,6 +15,7 @@ from app.models.conversation import Conversation, Message
 from app.rag.service import RagService
 from app.repositories.chunk_repository import DocumentChunkRepository
 from app.repositories.conversation_repository import ConversationRepository
+from app.repositories.model_run_repository import ModelRunRepository
 from app.repositories.project_repository import ProjectRepository
 from app.repositories.prompt_version_repository import PromptVersionRepository
 from app.schemas.conversation import (
@@ -59,6 +60,7 @@ def _service(
         ProjectService(ProjectRepository(db)),
         rag_service,
         prompt_version_service,
+        ModelRunRepository(db),
     )
 
 

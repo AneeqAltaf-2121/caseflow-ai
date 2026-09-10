@@ -74,12 +74,14 @@ class ConversationRepository:
         content: str,
         citations: list[Citation] | None = None,
         prompt_version_id: uuid.UUID | None = None,
+        model_run_id: uuid.UUID | None = None,
     ) -> Message:
         message = Message(
             conversation_id=conversation_id,
             role=role,
             content=content,
             prompt_version_id=prompt_version_id,
+            model_run_id=model_run_id,
         )
         self._session.add(message)
         # Appending via the relationship (rather than setting citation.

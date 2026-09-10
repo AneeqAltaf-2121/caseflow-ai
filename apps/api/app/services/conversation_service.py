@@ -9,14 +9,17 @@ import uuid
 from dataclasses import dataclass
 
 from app.errors import NotFoundError
+from app.integrations.pricing import estimate_cost_usd
 from app.models.citation import Citation
 from app.models.conversation import Conversation, Message, MessageRole
+from app.models.model_run import ModelRunStatus
 from app.models.project import ProjectRole
 from app.rag.history import build_history_text
 from app.rag.prompts import SYSTEM_PROMPT
 from app.rag.service import DEFAULT_TOP_K, RagService
 from app.rag.service import Citation as RagCitation
 from app.repositories.conversation_repository import ConversationRepository
+from app.repositories.model_run_repository import ModelRunRepository
 from app.services.project_service import ProjectService
 from app.services.prompt_version_service import RAG_ANSWER_PROMPT_NAME, PromptVersionService
 
@@ -58,11 +61,13 @@ class ConversationService:
         project_service: ProjectService,
         rag_service: RagService,
         prompt_version_service: PromptVersionService,
+        model_run_repository: ModelRunRepository,
     ) -> None:
         self._repository = repository
         self._project_service = project_service
         self._rag_service = rag_service
         self._prompt_version_service = prompt_version_service
+        self._model_run_repository = model_run_repository
 
     async def create_conversation(
         self, *, project_id: uuid.UUID, user_id: uuid.UUID, title: str = DEFAULT_TITLE
@@ -151,17 +156,38 @@ class ConversationService:
             conversation_id=conversation_id, role=MessageRole.USER, content=content
         )
 
+        # `answer.model == "none"` (Phase 20's zero-evidence short circuit)
+        # means no generation call was actually made — the prompt template
+        # was fetched but never used, so neither a prompt-version credit
+        # nor a ModelRun row is created for it.
+        model_run_id = None
+        if answer.model != "none":
+            model_run = await self._model_run_repository.create(
+                provider=answer.provider,
+                model=answer.model,
+                prompt_version_id=prompt_version.id,
+                temperature=answer.temperature,
+                latency_ms=answer.latency_ms,
+                input_tokens=answer.input_tokens,
+                output_tokens=answer.output_tokens,
+                estimated_cost_usd=estimate_cost_usd(
+                    model=answer.model,
+                    input_tokens=answer.input_tokens,
+                    output_tokens=answer.output_tokens,
+                ),
+                status=ModelRunStatus.SUCCEEDED,
+                retrieval_config=answer.retrieval_config,
+            )
+            model_run_id = model_run.id
+
         citation_rows = [_to_citation_row(c) for c in answer.citations]
         assistant_message = await self._repository.add_message(
             conversation_id=conversation_id,
             role=MessageRole.ASSISTANT,
             content=answer.answer,
             citations=citation_rows,
-            # `answer.model == "none"` (Phase 20's zero-evidence short
-            # circuit) means no generation call was actually made — the
-            # prompt template was fetched but never used, so don't credit
-            # this message to it.
             prompt_version_id=prompt_version.id if answer.model != "none" else None,
+            model_run_id=model_run_id,
         )
         await self._repository.touch(conversation)
 
