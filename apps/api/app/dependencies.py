@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.jwt import TokenType, decode_token
 from app.config import Settings, get_settings
 from app.errors import UnauthorizedError
+from app.integrations.embeddings import EmbeddingProvider, get_embedding_provider
 from app.integrations.storage import StorageBackend
 
 
@@ -64,3 +65,14 @@ async def get_storage(request: Request) -> StorageBackend:
 
 
 StorageDep = Annotated[StorageBackend, Depends(get_storage)]
+
+
+def get_embedding_provider_dep(settings: SettingsDep) -> EmbeddingProvider:
+    """Constructed per-request rather than cached on app.state: every
+    implementation is either stateless (mock/local) or opens its own
+    short-lived HTTP client per call (OpenAI) — see
+    app/integrations/embeddings.py."""
+    return get_embedding_provider(settings)
+
+
+EmbeddingProviderDep = Annotated[EmbeddingProvider, Depends(get_embedding_provider_dep)]

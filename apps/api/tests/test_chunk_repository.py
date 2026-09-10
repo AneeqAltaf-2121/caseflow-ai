@@ -95,6 +95,58 @@ async def test_delete_for_document_removes_all_its_chunks(db_session: AsyncSessi
     assert await repository.list_for_document(document.id) == []
 
 
+async def test_search_by_embedding_orders_by_similarity_and_scopes_to_project(
+    db_session: AsyncSession,
+) -> None:
+    user = await UserRepository(db_session).create(email="search@x.com", display_name="Search")
+    org = await OrganizationRepository(db_session).create(name="SearchCo", slug="searchco")
+    project_service = ProjectService(ProjectRepository(db_session))
+    project_a = await project_service.create_project(
+        organization_id=org.id, name="A", description=None, created_by=user.id
+    )
+    project_b = await project_service.create_project(
+        organization_id=org.id, name="B", description=None, created_by=user.id
+    )
+    document_repository = DocumentRepository(db_session)
+
+    doc_a = await document_repository.create(
+        project_id=project_a.id,
+        filename="a.txt",
+        content_type="text/plain",
+        size_bytes=1,
+        checksum_sha256="a",
+        storage_key="a.txt",
+        uploaded_by=user.id,
+    )
+    doc_b = await document_repository.create(
+        project_id=project_b.id,
+        filename="b.txt",
+        content_type="text/plain",
+        size_bytes=1,
+        checksum_sha256="b",
+        storage_key="b.txt",
+        uploaded_by=user.id,
+    )
+    await db_session.commit()
+    doc_a = await document_repository.get_by_id(doc_a.id)
+    doc_b = await document_repository.get_by_id(doc_b.id)
+
+    repository = DocumentChunkRepository(db_session)
+    close_match = _chunk(doc_a, text="close match", embedding=[1.0, 0.0, 0.0])
+    far_match = _chunk(doc_a, text="far match", embedding=[0.0, 1.0, 0.0])
+    other_project_chunk = _chunk(doc_b, text="other project", embedding=[1.0, 0.0, 0.0])
+    await repository.bulk_create([far_match, close_match, other_project_chunk])
+    await db_session.commit()
+
+    results = await repository.search_by_embedding(
+        project_id=project_a.id, query_embedding=[1.0, 0.0, 0.0], limit=10
+    )
+
+    assert [chunk.text for chunk, _score in results] == ["close match", "far match"]
+    assert results[0][1] == pytest.approx(1.0)
+    assert results[1][1] == pytest.approx(0.0)
+
+
 async def test_embedding_round_trips_as_a_float_list(db_session: AsyncSession) -> None:
     document = await _seed_document(db_session)
     repository = DocumentChunkRepository(db_session)
