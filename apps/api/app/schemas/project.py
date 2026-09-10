@@ -12,6 +12,14 @@ class ProjectCreate(BaseModel):
     description: str | None = Field(default=None, max_length=10_000)
 
 
+class ProjectUpdate(BaseModel):
+    """Patch semantics: only fields explicitly present in the request body
+    are applied (see ProjectService.update_project / model_fields_set)."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=10_000)
+
+
 class ProjectRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

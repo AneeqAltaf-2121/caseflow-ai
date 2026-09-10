@@ -118,3 +118,65 @@ async def test_owner_can_invite_member_but_viewer_cannot(
         headers=_auth_headers(invitee.id),
     )
     assert forbidden_response.status_code == 403
+
+
+async def test_update_and_delete_project(
+    api_client: httpx.AsyncClient, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    user_id, org_id = await _seed_user_and_org(db_session_factory, "crud")
+    headers = _auth_headers(user_id)
+
+    create_response = await api_client.post(
+        "/projects",
+        json={"organization_id": str(org_id), "name": "Before"},
+        headers=headers,
+    )
+    project_id = create_response.json()["id"]
+
+    patch_response = await api_client.patch(
+        f"/projects/{project_id}", json={"name": "After"}, headers=headers
+    )
+    assert patch_response.status_code == 200
+    assert patch_response.json()["name"] == "After"
+
+    delete_response = await api_client.delete(f"/projects/{project_id}", headers=headers)
+    assert delete_response.status_code == 204
+
+    get_response = await api_client.get(f"/projects/{project_id}", headers=headers)
+    assert get_response.status_code == 404
+
+
+async def test_remove_member_route(
+    api_client: httpx.AsyncClient, db_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    async with db_session_factory() as session:
+        owner = await UserRepository(session).create(email="rm-owner@x.com", display_name="Owner")
+        member = await UserRepository(session).create(
+            email="rm-member@x.com", display_name="Member"
+        )
+        org = await OrganizationRepository(session).create(name="Z", slug="z-corp")
+        await session.commit()
+
+    owner_headers = _auth_headers(owner.id)
+    create_response = await api_client.post(
+        "/projects",
+        json={"organization_id": str(org.id), "name": "Removable"},
+        headers=owner_headers,
+    )
+    project_id = create_response.json()["id"]
+
+    await api_client.post(
+        f"/projects/{project_id}/members",
+        json={"email": "rm-member@x.com", "role": "viewer"},
+        headers=owner_headers,
+    )
+
+    remove_response = await api_client.delete(
+        f"/projects/{project_id}/members/{member.id}", headers=owner_headers
+    )
+    assert remove_response.status_code == 204
+
+    members_response = await api_client.get(
+        f"/projects/{project_id}/members", headers=owner_headers
+    )
+    assert len(members_response.json()) == 1

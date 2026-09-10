@@ -106,3 +106,53 @@ class ProjectService:
             role=role,
             invited_by=inviter_user_id,
         )
+
+    async def update_project(
+        self,
+        *,
+        project_id: uuid.UUID,
+        user_id: uuid.UUID,
+        name: str | None,
+        description: str | None,
+        description_set: bool,
+    ) -> Project:
+        """Rename/redescribe a project. Owners and editors may do this."""
+        await self.require_role(
+            project_id=project_id,
+            user_id=user_id,
+            allowed={ProjectRole.OWNER, ProjectRole.EDITOR},
+        )
+        project = await self._repository.get_by_id(project_id)
+        assert project is not None  # require_role already proved it exists
+        return await self._repository.update(
+            project, name=name, description=description, has_description=description_set
+        )
+
+    async def delete_project(self, *, project_id: uuid.UUID, user_id: uuid.UUID) -> None:
+        """Permanently delete a project and everything scoped to it
+        (members, documents, conversations, ... via ON DELETE CASCADE).
+        Owner-only — this is irreversible."""
+        await self.require_role(project_id=project_id, user_id=user_id, allowed={ProjectRole.OWNER})
+        project = await self._repository.get_by_id(project_id)
+        assert project is not None
+        await self._repository.delete(project)
+
+    async def remove_member(
+        self, *, project_id: uuid.UUID, actor_user_id: uuid.UUID, target_user_id: uuid.UUID
+    ) -> None:
+        """Remove a member from a project. Owner-only; the last remaining
+        owner can't be removed, so a project can never end up ownerless."""
+        await self.require_role(
+            project_id=project_id, user_id=actor_user_id, allowed={ProjectRole.OWNER}
+        )
+        target = await self._repository.get_member(project_id=project_id, user_id=target_user_id)
+        if target is None:
+            raise NotFoundError("That user is not a member of this project.")
+
+        if target.role == ProjectRole.OWNER:
+            members = await self._repository.list_members(project_id)
+            remaining_owners = [m for m in members if m.role == ProjectRole.OWNER]
+            if len(remaining_owners) <= 1:
+                raise ConflictError("Cannot remove the last owner of a project.")
+
+        await self._repository.remove_member(target)
