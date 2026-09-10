@@ -104,3 +104,8 @@ class ProjectRepository:
     async def remove_member(self, member: ProjectMember) -> None:
         await self._session.delete(member)
         await self._session.flush()
+
+    async def update_member_role(self, member: ProjectMember, role: ProjectRole) -> ProjectMember:
+        member.role = role
+        await self._session.flush()
+        return member

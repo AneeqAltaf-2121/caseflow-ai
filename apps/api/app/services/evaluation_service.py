@@ -16,6 +16,7 @@ import uuid
 
 from caseflow_evals import DatasetValidationError, EvaluationDataset, load_dataset
 
+from app.audit import AuditAction, AuditTargetType
 from app.config import Settings
 from app.errors import NotFoundError, ValidationError
 from app.evals.dataset_paths import DatasetNotFoundError, resolve_dataset_path
@@ -27,6 +28,7 @@ from app.integrations.generation import (
 from app.models.evaluation import EvaluationRun
 from app.models.project import ProjectRole
 from app.rag.prompts import SYSTEM_PROMPT
+from app.repositories.audit_event_repository import AuditEventRepository
 from app.repositories.evaluation_repository import EvaluationRunRepository
 from app.services.project_service import ProjectService
 from app.services.prompt_version_service import RAG_ANSWER_PROMPT_NAME, PromptVersionService
@@ -55,12 +57,14 @@ class EvaluationRunService:
         prompt_version_service: PromptVersionService,
         generation_provider: GenerationProvider,
         settings: Settings,
+        audit_repository: AuditEventRepository | None = None,
     ) -> None:
         self._repository = repository
         self._project_service = project_service
         self._prompt_version_service = prompt_version_service
         self._generation_provider = generation_provider
         self._settings = settings
+        self._audit_repository = audit_repository
 
     async def create_run(
         self,
@@ -101,7 +105,7 @@ class EvaluationRunService:
         else:
             resolved_model = self._generation_provider.model
 
-        return await self._repository.create(
+        run = await self._repository.create(
             project_id=project_id,
             dataset_name=dataset.name,
             dataset_version=dataset.version,
@@ -110,6 +114,20 @@ class EvaluationRunService:
             retriever_version=RETRIEVER_VERSION,
             created_by=user_id,
         )
+        if self._audit_repository is not None:
+            await self._audit_repository.create(
+                project_id=project_id,
+                actor_user_id=user_id,
+                action=AuditAction.EVALUATION_RUN_CREATED,
+                target_type=AuditTargetType.EVALUATION_RUN,
+                target_id=run.id,
+                metadata={
+                    "dataset_name": run.dataset_name,
+                    "dataset_version": run.dataset_version,
+                    "model": run.model,
+                },
+            )
+        return run
 
     async def list_runs(self, *, project_id: uuid.UUID, user_id: uuid.UUID) -> list[EvaluationRun]:
         await self._project_service.get_project_for_user(project_id=project_id, user_id=user_id)

@@ -7,14 +7,26 @@ CurrentUserIdDep) rather than trusted from client input.
 
 import uuid
 
+from app.audit import AuditAction, AuditTargetType
 from app.errors import ConflictError, ForbiddenError, NotFoundError
 from app.models.project import Project, ProjectMember, ProjectRole
+from app.repositories.audit_event_repository import AuditEventRepository
 from app.repositories.project_repository import ProjectRepository
 
 
 class ProjectService:
-    def __init__(self, repository: ProjectRepository) -> None:
+    def __init__(
+        self, repository: ProjectRepository, audit_repository: AuditEventRepository | None = None
+    ) -> None:
         self._repository = repository
+        # Optional (defaults to None, same pattern as app.cache.Cache) —
+        # ProjectService is constructed from ~30 call sites across the
+        # app, most of which only need authorization checks and never
+        # write an audit event; making this required would force every
+        # one of them to thread an AuditEventRepository through for no
+        # reason. Only routes/services that actually perform an
+        # audited action pass one.
+        self._audit_repository = audit_repository
 
     async def create_project(
         self,
@@ -42,6 +54,15 @@ class ProjectService:
             role=ProjectRole.OWNER,
             invited_by=None,
         )
+        if self._audit_repository is not None:
+            await self._audit_repository.create(
+                project_id=project.id,
+                actor_user_id=created_by,
+                action=AuditAction.PROJECT_CREATED,
+                target_type=AuditTargetType.PROJECT,
+                target_id=project.id,
+                metadata={"name": project.name},
+            )
         return project
 
     async def list_projects_for_user(self, user_id: uuid.UUID) -> list[Project]:
@@ -100,12 +121,60 @@ class ProjectService:
         if existing is not None:
             raise ConflictError("User is already a member of this project.")
 
-        return await self._repository.add_member(
+        member = await self._repository.add_member(
             project_id=project_id,
             user_id=invitee_user_id,
             role=role,
             invited_by=inviter_user_id,
         )
+        if self._audit_repository is not None:
+            await self._audit_repository.create(
+                project_id=project_id,
+                actor_user_id=inviter_user_id,
+                action=AuditAction.MEMBER_INVITED,
+                target_type=AuditTargetType.PROJECT_MEMBER,
+                target_id=invitee_user_id,
+                metadata={"role": role.value},
+            )
+        return member
+
+    async def change_member_role(
+        self,
+        *,
+        project_id: uuid.UUID,
+        actor_user_id: uuid.UUID,
+        target_user_id: uuid.UUID,
+        role: ProjectRole,
+    ) -> ProjectMember:
+        """Change an existing member's role. Owner-only; demoting the last
+        remaining owner away from OWNER is refused for the same reason
+        remove_member refuses to remove the last owner — a project can
+        never end up without one."""
+        await self.require_role(
+            project_id=project_id, user_id=actor_user_id, allowed={ProjectRole.OWNER}
+        )
+        target = await self._repository.get_member(project_id=project_id, user_id=target_user_id)
+        if target is None:
+            raise NotFoundError("That user is not a member of this project.")
+
+        if target.role == ProjectRole.OWNER and role != ProjectRole.OWNER:
+            members = await self._repository.list_members(project_id)
+            remaining_owners = [m for m in members if m.role == ProjectRole.OWNER]
+            if len(remaining_owners) <= 1:
+                raise ConflictError("Cannot demote the last owner of a project.")
+
+        previous_role = target.role
+        updated = await self._repository.update_member_role(target, role)
+        if self._audit_repository is not None:
+            await self._audit_repository.create(
+                project_id=project_id,
+                actor_user_id=actor_user_id,
+                action=AuditAction.MEMBER_ROLE_CHANGED,
+                target_type=AuditTargetType.PROJECT_MEMBER,
+                target_id=target_user_id,
+                metadata={"from_role": previous_role.value, "to_role": role.value},
+            )
+        return updated
 
     async def update_project(
         self,
@@ -156,3 +225,12 @@ class ProjectService:
                 raise ConflictError("Cannot remove the last owner of a project.")
 
         await self._repository.remove_member(target)
+        if self._audit_repository is not None:
+            await self._audit_repository.create(
+                project_id=project_id,
+                actor_user_id=actor_user_id,
+                action=AuditAction.MEMBER_REMOVED,
+                target_type=AuditTargetType.PROJECT_MEMBER,
+                target_id=target_user_id,
+                metadata={"role": target.role.value},
+            )

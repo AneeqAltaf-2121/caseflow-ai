@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import CurrentUserIdDep, DbSessionDep
 from app.jobs.reports import generate_report_job
 from app.models.report import Report, ReportSection
+from app.repositories.audit_event_repository import AuditEventRepository
 from app.repositories.job_repository import JobRepository
 from app.repositories.project_repository import ProjectRepository
 from app.repositories.report_repository import ReportRepository
@@ -27,7 +28,9 @@ router = APIRouter(prefix="/projects/{project_id}/reports", tags=["reports"])
 
 
 def _service(db: DbSessionDep) -> ReportService:
-    return ReportService(ReportRepository(db), ProjectService(ProjectRepository(db)))
+    return ReportService(
+        ReportRepository(db), ProjectService(ProjectRepository(db)), AuditEventRepository(db)
+    )
 
 
 async def _enqueue_report(db: AsyncSession, report_id: uuid.UUID) -> None:

@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import CurrentUserIdDep, DbSessionDep, SettingsDep, StorageDep
 from app.jobs.ingestion import process_document_job
+from app.repositories.audit_event_repository import AuditEventRepository
+from app.repositories.chunk_repository import DocumentChunkRepository
 from app.repositories.document_repository import DocumentRepository
 from app.repositories.job_repository import JobRepository
 from app.repositories.project_repository import ProjectRepository
@@ -24,7 +26,13 @@ router = APIRouter(prefix="/projects/{project_id}/documents", tags=["documents"]
 
 
 def _service(db: DbSessionDep, storage: StorageDep) -> DocumentService:
-    return DocumentService(DocumentRepository(db), ProjectService(ProjectRepository(db)), storage)
+    return DocumentService(
+        DocumentRepository(db),
+        ProjectService(ProjectRepository(db)),
+        storage,
+        AuditEventRepository(db),
+        DocumentChunkRepository(db),
+    )
 
 
 async def _enqueue_ingestion(db: AsyncSession, document_id: uuid.UUID) -> None:
@@ -112,6 +120,19 @@ async def get_document(
         project_id=project_id, document_id=document_id, user_id=current_user_id
     )
     return DocumentRead.model_validate(document)
+
+
+@router.delete("/{document_id}", status_code=204)
+async def delete_document(
+    project_id: uuid.UUID,
+    document_id: uuid.UUID,
+    current_user_id: CurrentUserIdDep,
+    db: DbSessionDep,
+    storage: StorageDep,
+) -> None:
+    await _service(db, storage).delete_document(
+        project_id=project_id, document_id=document_id, user_id=current_user_id
+    )
 
 
 @router.get("/{document_id}/download")

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import CurrentUserIdDep, DbSessionDep, GenerationProviderDep, SettingsDep
 from app.jobs.evaluations import run_evaluation_job
 from app.models.evaluation import EvaluationResult, EvaluationRun
+from app.repositories.audit_event_repository import AuditEventRepository
 from app.repositories.evaluation_repository import EvaluationRunRepository
 from app.repositories.job_repository import JobRepository
 from app.repositories.project_repository import ProjectRepository
@@ -37,6 +38,7 @@ def _service(
         PromptVersionService(PromptVersionRepository(db), ProjectService(ProjectRepository(db))),
         generation_provider,
         settings,
+        AuditEventRepository(db),
     )
 
 
