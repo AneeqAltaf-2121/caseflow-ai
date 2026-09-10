@@ -8,7 +8,7 @@ import uuid
 from fastapi import APIRouter
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import CurrentUserIdDep, DbSessionDep, GenerationProviderDep
+from app.dependencies import CurrentUserIdDep, DbSessionDep, GenerationProviderDep, SettingsDep
 from app.jobs.evaluations import run_evaluation_job
 from app.models.evaluation import EvaluationResult, EvaluationRun
 from app.repositories.evaluation_repository import EvaluationRunRepository
@@ -28,12 +28,15 @@ from app.services.prompt_version_service import PromptVersionService
 router = APIRouter(prefix="/projects/{project_id}/evaluations", tags=["evaluations"])
 
 
-def _service(db: DbSessionDep, generation_provider: GenerationProviderDep) -> EvaluationRunService:
+def _service(
+    db: DbSessionDep, generation_provider: GenerationProviderDep, settings: SettingsDep
+) -> EvaluationRunService:
     return EvaluationRunService(
         EvaluationRunRepository(db),
         ProjectService(ProjectRepository(db)),
         PromptVersionService(PromptVersionRepository(db), ProjectService(ProjectRepository(db))),
         generation_provider,
+        settings,
     )
 
 
@@ -97,9 +100,13 @@ async def create_evaluation_run(
     current_user_id: CurrentUserIdDep,
     db: DbSessionDep,
     generation_provider: GenerationProviderDep,
+    settings: SettingsDep,
 ) -> EvaluationRunRead:
-    run = await _service(db, generation_provider).create_run(
-        project_id=project_id, user_id=current_user_id, dataset_name=payload.dataset_name
+    run = await _service(db, generation_provider, settings).create_run(
+        project_id=project_id,
+        user_id=current_user_id,
+        dataset_name=payload.dataset_name,
+        model=payload.model,
     )
     await _enqueue_evaluation_run(db, run.id)
     return _run_read(run)
@@ -111,8 +118,9 @@ async def list_evaluation_runs(
     current_user_id: CurrentUserIdDep,
     db: DbSessionDep,
     generation_provider: GenerationProviderDep,
+    settings: SettingsDep,
 ) -> list[EvaluationRunRead]:
-    runs = await _service(db, generation_provider).list_runs(
+    runs = await _service(db, generation_provider, settings).list_runs(
         project_id=project_id, user_id=current_user_id
     )
     return [_run_read(r) for r in runs]
@@ -125,8 +133,9 @@ async def get_evaluation_run(
     current_user_id: CurrentUserIdDep,
     db: DbSessionDep,
     generation_provider: GenerationProviderDep,
+    settings: SettingsDep,
 ) -> EvaluationRunDetailRead:
-    run = await _service(db, generation_provider).get_run(
+    run = await _service(db, generation_provider, settings).get_run(
         evaluation_run_id=evaluation_run_id, project_id=project_id, user_id=current_user_id
     )
     return EvaluationRunDetailRead(

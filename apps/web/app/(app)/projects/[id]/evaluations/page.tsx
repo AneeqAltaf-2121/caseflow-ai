@@ -85,6 +85,57 @@ function MetricCard({ label, value }: { label: string; value: string }) {
   );
 }
 
+const COMPARE_ROWS: { label: string; pick: (m: RunMetrics) => string }[] = [
+  { label: "Faithfulness", pick: (m) => pct(m.faithfulness) },
+  { label: "Relevance", pick: (m) => pct(m.relevance) },
+  { label: "Completeness", pick: (m) => pct(m.completeness) },
+  { label: "Recall@K", pick: (m) => pct(m.recall) },
+  { label: "Citation accuracy", pick: (m) => pct(m.citationAccuracy) },
+  { label: "Hallucination rate", pick: (m) => pct(m.hallucinationRate) },
+  {
+    label: "Latency P50 / P95",
+    pick: (m) => (m.latencyP50 === null ? "—" : `${m.latencyP50}ms / ${m.latencyP95}ms`),
+  },
+  { label: "Total cost", pick: (m) => usd(m.totalCost) },
+];
+
+function ComparisonTable({ runs }: { runs: EvaluationRunDetail[] }) {
+  const withMetrics = runs.map((run) => ({ run, metrics: computeMetrics(run.results) }));
+  return (
+    <div className="overflow-x-auto rounded-md border border-zinc-200 dark:border-zinc-800">
+      <table className="w-full min-w-max text-sm">
+        <thead>
+          <tr className="border-b border-zinc-200 dark:border-zinc-800">
+            <th className="px-3 py-2 text-left text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+              Metric
+            </th>
+            {withMetrics.map(({ run }) => (
+              <th
+                key={run.id}
+                className="px-3 py-2 text-left text-[11px] font-medium text-zinc-500 dark:text-zinc-400"
+              >
+                {run.model}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {COMPARE_ROWS.map((row) => (
+            <tr key={row.label} className="border-b border-zinc-100 last:border-0 dark:border-zinc-900">
+              <td className="px-3 py-1.5 text-zinc-500 dark:text-zinc-400">{row.label}</td>
+              {withMetrics.map(({ run, metrics }) => (
+                <td key={run.id} className="px-3 py-1.5 font-medium text-zinc-800 dark:text-zinc-200">
+                  {row.pick(metrics)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function EvaluationsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { project, error: projectError } = useProject(id);
@@ -96,7 +147,15 @@ export default function EvaluationsPage({ params }: { params: Promise<{ id: stri
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [datasetName, setDatasetName] = useState("sample_contract_qa");
+  const [model, setModel] = useState("");
   const [creating, setCreating] = useState(false);
+
+  // Phase 31 model comparison: select 2+ succeeded runs of the same
+  // dataset and view their metrics side by side.
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareIds, setCompareIds] = useState<Set<string>>(new Set());
+  const [compareRuns, setCompareRuns] = useState<EvaluationRunDetail[] | null>(null);
+  const [comparing, setComparing] = useState(false);
 
   async function loadRuns() {
     try {
@@ -147,7 +206,7 @@ export default function EvaluationsPage({ params }: { params: Promise<{ id: stri
     setCreating(true);
     setError(null);
     try {
-      const run = await api.createEvaluationRun(id, datasetName.trim());
+      const run = await api.createEvaluationRun(id, datasetName.trim(), model.trim() || undefined);
       setShowCreate(false);
       await loadRuns();
       setActiveId(run.id);
@@ -193,8 +252,19 @@ export default function EvaluationsPage({ params }: { params: Promise<{ id: stri
                 placeholder="sample_contract_qa"
                 className="rounded-md border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
               />
+              <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                Model (optional — Phase 31 comparison)
+              </label>
+              <input
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder="default"
+                className="rounded-md border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+              />
               <p className="text-[11px] text-zinc-400">
-                Matches a file in packages/evals/datasets — see docs/evaluations.md.
+                Matches a file in packages/evals/datasets — see docs/evaluations.md. Leave the
+                model blank to use the configured default, or name a known model (e.g.
+                gpt-4o-mini) to run the same dataset through a different one for comparison.
               </p>
               <button
                 type="submit"
@@ -206,15 +276,44 @@ export default function EvaluationsPage({ params }: { params: Promise<{ id: stri
             </form>
           )}
 
+          <button
+            onClick={() => {
+              setCompareMode((v) => !v);
+              setCompareIds(new Set());
+              setCompareRuns(null);
+            }}
+            className={`rounded-md border px-3 py-1.5 text-sm font-medium ${
+              compareMode
+                ? "border-zinc-900 text-zinc-900 dark:border-zinc-100 dark:text-zinc-100"
+                : "border-zinc-200 text-zinc-500 hover:border-zinc-400 dark:border-zinc-800 dark:text-zinc-400"
+            }`}
+          >
+            {compareMode ? "Exit compare" : "Compare runs"}
+          </button>
+
           {runs === null && <SkeletonList rows={3} />}
           {runs?.length === 0 && <p className="px-1 text-xs text-zinc-400">No runs yet.</p>}
           <ul className="flex flex-col gap-1">
             {runs?.map((run) => (
-              <li key={run.id}>
+              <li key={run.id} className="flex items-center gap-1">
+                {compareMode && (
+                  <input
+                    type="checkbox"
+                    checked={compareIds.has(run.id)}
+                    disabled={run.status !== "succeeded"}
+                    onChange={(e) => {
+                      const next = new Set(compareIds);
+                      if (e.target.checked) next.add(run.id);
+                      else next.delete(run.id);
+                      setCompareIds(next);
+                    }}
+                    className="shrink-0"
+                  />
+                )}
                 <button
                   onClick={() => setActiveId(run.id)}
                   className={`flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left text-sm ${
-                    activeId === run.id
+                    activeId === run.id && !compareMode
                       ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
                       : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900"
                   }`}
@@ -228,7 +327,7 @@ export default function EvaluationsPage({ params }: { params: Promise<{ id: stri
                     </span>
                   </span>
                   <span
-                    className={`text-[11px] ${activeId === run.id ? "opacity-80" : "text-zinc-400"}`}
+                    className={`text-[11px] ${activeId === run.id && !compareMode ? "opacity-80" : "text-zinc-400"}`}
                   >
                     v{run.dataset_version} · {run.model}
                   </span>
@@ -236,19 +335,64 @@ export default function EvaluationsPage({ params }: { params: Promise<{ id: stri
               </li>
             ))}
           </ul>
+
+          {compareMode && (
+            <button
+              onClick={async () => {
+                setComparing(true);
+                setError(null);
+                try {
+                  const fetched = await Promise.all(
+                    [...compareIds].map((runId) => api.getEvaluationRun(id, runId))
+                  );
+                  setCompareRuns(fetched);
+                } catch (err) {
+                  setError(err instanceof ApiError ? err.message : "Failed to load comparison.");
+                } finally {
+                  setComparing(false);
+                }
+              }}
+              disabled={compareIds.size < 2 || comparing}
+              className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+            >
+              {comparing
+                ? "Loading…"
+                : `Compare selected (${compareIds.size})`}
+            </button>
+          )}
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col gap-4">
-          {!activeId && (
+          {compareMode && compareRuns && compareRuns.length > 0 && (
+            <div className="flex flex-col gap-3">
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+                Model comparison
+              </h2>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                {compareRuns.length} runs of{" "}
+                {[...new Set(compareRuns.map((r) => r.dataset_name))].join(", ")}.
+              </p>
+              <ComparisonTable runs={compareRuns} />
+            </div>
+          )}
+
+          {compareMode && !compareRuns && (
+            <EmptyState
+              title="Compare models"
+              description="Select two or more succeeded runs of the same dataset in the sidebar, then click Compare selected to see faithfulness, relevance, completeness, recall, citation accuracy, hallucination rate, latency, and cost side by side."
+            />
+          )}
+
+          {!compareMode && !activeId && (
             <EmptyState
               title="Evaluate answer quality"
               description="Run a dataset (see packages/evals/datasets) through this project's retriever and RAG pipeline to measure faithfulness, relevance, completeness, citation accuracy, hallucination rate, recall, latency, and cost."
             />
           )}
 
-          {activeId && !detail && <Skeleton className="h-40 w-full" />}
+          {!compareMode && activeId && !detail && <Skeleton className="h-40 w-full" />}
 
-          {activeId && detail && (
+          {!compareMode && activeId && detail && (
             <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between">
                 <div>

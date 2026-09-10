@@ -227,10 +227,10 @@ export const api = {
     request<ReportDetail>(`/projects/${projectId}/reports/${reportId}`),
 
   // --- evaluations ---
-  createEvaluationRun: (projectId: string, datasetName: string) =>
+  createEvaluationRun: (projectId: string, datasetName: string, model?: string) =>
     request<EvaluationRun>(`/projects/${projectId}/evaluations`, {
       method: "POST",
-      body: { dataset_name: datasetName },
+      body: { dataset_name: datasetName, model: model ?? null },
     }),
   listEvaluationRuns: (projectId: string) =>
     request<EvaluationRun[]>(`/projects/${projectId}/evaluations`),

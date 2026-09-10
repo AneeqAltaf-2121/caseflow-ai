@@ -161,3 +161,29 @@ def get_generation_provider(settings: Settings) -> GenerationProvider:
     if settings.llm_provider == "anthropic":
         return AnthropicGenerationProvider(settings)
     return MockGenerationProvider()
+
+
+class UnknownModelError(ValueError):
+    pass
+
+
+def get_generation_provider_by_model(model: str, settings: Settings) -> GenerationProvider:
+    """Resolves a specific model name to its provider, independent of
+    `settings.llm_provider` — Phase 31's model comparison needs to run the
+    *same* dataset through several models in separate EvaluationRuns, not
+    just whichever one is globally configured. Instantiating a real
+    provider here doesn't spend anything (no network call happens until
+    `.generate()` is actually awaited), so this is safe to call just to
+    validate a requested model name exists.
+    """
+    providers: dict[str, GenerationProvider] = {
+        MockGenerationProvider.model: MockGenerationProvider(),
+        OpenAIGenerationProvider.model: OpenAIGenerationProvider(settings),
+        AnthropicGenerationProvider.model: AnthropicGenerationProvider(settings),
+    }
+    try:
+        return providers[model]
+    except KeyError:
+        raise UnknownModelError(
+            f"Unknown model {model!r}. Known models: {sorted(providers)}."
+        ) from None
