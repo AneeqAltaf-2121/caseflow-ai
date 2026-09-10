@@ -19,6 +19,7 @@ from app.schemas.project import (
     ProjectMemberInvite,
     ProjectMemberRead,
     ProjectRead,
+    ProjectUpdate,
 )
 from app.services.project_service import ProjectService
 
@@ -55,6 +56,32 @@ async def get_project(
     return ProjectRead.model_validate(project)
 
 
+@router.patch("/{project_id}", response_model=ProjectRead)
+async def update_project(
+    project_id: uuid.UUID,
+    payload: ProjectUpdate,
+    current_user_id: CurrentUserIdDep,
+    db: DbSessionDep,
+) -> ProjectRead:
+    service = ProjectService(ProjectRepository(db))
+    project = await service.update_project(
+        project_id=project_id,
+        user_id=current_user_id,
+        name=payload.name,
+        description=payload.description,
+        description_set="description" in payload.model_fields_set,
+    )
+    return ProjectRead.model_validate(project)
+
+
+@router.delete("/{project_id}", status_code=204)
+async def delete_project(
+    project_id: uuid.UUID, current_user_id: CurrentUserIdDep, db: DbSessionDep
+) -> None:
+    service = ProjectService(ProjectRepository(db))
+    await service.delete_project(project_id=project_id, user_id=current_user_id)
+
+
 @router.get("/{project_id}/members", response_model=list[ProjectMemberRead])
 async def list_members(
     project_id: uuid.UUID, current_user_id: CurrentUserIdDep, db: DbSessionDep
@@ -83,3 +110,16 @@ async def invite_member(
         role=payload.role,
     )
     return ProjectMemberRead.model_validate(member)
+
+
+@router.delete("/{project_id}/members/{user_id}", status_code=204)
+async def remove_member(
+    project_id: uuid.UUID,
+    user_id: uuid.UUID,
+    current_user_id: CurrentUserIdDep,
+    db: DbSessionDep,
+) -> None:
+    service = ProjectService(ProjectRepository(db))
+    await service.remove_member(
+        project_id=project_id, actor_user_id=current_user_id, target_user_id=user_id
+    )
