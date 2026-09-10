@@ -1,11 +1,11 @@
 """Document processing job.
 
-Phase 8 scope only: prove the async pipeline end-to-end (upload returns
-immediately; a worker picks the job up, reads the file back out of
-storage, and transitions the document to READY/FAILED) with real
-retry/backoff and a durable Job record. Actual text extraction is Phase 9
-(app/ingestion/) — there's nowhere to put extracted text yet (DocumentChunk
-doesn't exist until Phase 9-11 per docs/domain-model.md).
+Reads the file back out of storage and runs it through the extraction
+pipeline (app/ingestion/), with real retry/backoff and a durable Job
+record. There's nowhere to persist the extracted text yet — chunking
+(Phase 10) and DocumentChunk/pgvector (Phase 11) land in later phases — so
+for now a successful extraction just proves the pipeline runs end-to-end
+and marks the document READY; nothing is stored beyond that yet.
 
 `process_document` is a plain async function so tests can call it directly
 against the test session factory/storage backend, without a running broker
@@ -22,6 +22,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import get_settings
 from app.database import create_engine, create_session_factory
+from app.errors import ValidationError
+from app.ingestion.pipeline import extract_document
 from app.integrations.storage import StorageBackend, get_storage_backend
 from app.models.document import DocumentStatus
 from app.repositories.document_repository import DocumentRepository
@@ -58,11 +60,27 @@ async def process_document(
         await session.commit()
 
         try:
-            # Phase 9 replaces this with real extraction (PDF/DOCX/TXT) and
-            # chunking. For now, just prove storage is reachable and the
-            # bytes round-trip correctly.
-            await storage.get(key=document.storage_key)
-        except Exception as exc:  # noqa: BLE001 - any failure means retry/fail, not crash the worker
+            data = await storage.get(key=document.storage_key)
+            extracted = extract_document(
+                content_type=document.content_type, data=data, filename=document.filename
+            )
+        except ValidationError as exc:
+            # Not transient (corrupt/unreadable file, unsupported content
+            # type) — retrying the same bytes would just fail the same way,
+            # so this fails permanently on the first attempt rather than
+            # burning through max_attempts with backoff.
+            await job_repo.record_failure(job, str(exc))
+            await job_repo.mark_failed(job)
+            await doc_repo.update_status(document, DocumentStatus.FAILED)
+            await session.commit()
+            logger.error(
+                "ingestion_job_failed_permanently",
+                job_id=str(job_id),
+                document_id=str(document_id),
+                error=str(exc),
+            )
+            return
+        except Exception as exc:  # noqa: BLE001 - any other failure is treated as transient
             await job_repo.record_failure(job, str(exc))
             exhausted = job.attempt >= job.max_attempts
             if exhausted:
@@ -90,7 +108,13 @@ async def process_document(
         await doc_repo.update_status(document, DocumentStatus.READY)
         await job_repo.mark_succeeded(job)
         await session.commit()
-        logger.info("ingestion_job_succeeded", job_id=str(job_id), document_id=str(document_id))
+        logger.info(
+            "ingestion_job_succeeded",
+            job_id=str(job_id),
+            document_id=str(document_id),
+            page_count=extracted.page_count,
+            char_count=len(extracted.full_text),
+        )
 
 
 @dramatiq.actor(max_retries=3, min_backoff=1_000, max_backoff=30_000, queue_name="ingestion")
