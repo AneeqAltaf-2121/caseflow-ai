@@ -1,5 +1,6 @@
 """Citation-grounded question answering (Phase 19): retrieve -> build
-context -> generate -> extract + validate citations.
+context -> generate -> extract + validate citations. Grounding
+(Phase 20): refuse to guess when there's no evidence to answer from.
 
 Stateless for now — nothing here persists a Conversation/Message/Citation
 row (those tables/wiring are Phase 21). This is the core RAG mechanism
@@ -12,6 +13,7 @@ from dataclasses import dataclass
 from app.integrations.generation import GenerationProvider
 from app.rag.citations import extract_cited_source_numbers
 from app.rag.context_builder import build_context
+from app.rag.grounding import INSUFFICIENT_EVIDENCE_MESSAGE
 from app.rag.prompts import SYSTEM_PROMPT, build_user_prompt
 from app.services.retrieval_service import RetrievalService
 
@@ -34,6 +36,14 @@ class RagAnswer:
     citations: list[Citation]
     sources_considered: int
     model: str
+    # True when the answer shouldn't be trusted as evidence-backed: either
+    # nothing was retrieved at all, or the model produced zero citations
+    # despite having sources to work with (see app/rag/grounding.py for
+    # why citation presence, not a similarity threshold, is the signal).
+    # `answer` is still the model's real text in the latter case — this is
+    # a warning flag for the caller/UI, not a silent rewrite of what the
+    # model said.
+    insufficient_evidence: bool
 
 
 class RagService:
@@ -55,6 +65,17 @@ class RagService:
             project_id=project_id, user_id=user_id, query=query, top_k=top_k
         )
         chunks = [result.chunk for result in results]
+
+        if not chunks:
+            # Nothing to answer from — don't spend a generation call
+            # producing a guess with no grounding at all.
+            return RagAnswer(
+                answer=INSUFFICIENT_EVIDENCE_MESSAGE,
+                citations=[],
+                sources_considered=0,
+                model="none",
+                insufficient_evidence=True,
+            )
 
         context = build_context(chunks)
         generation = await self._generation_provider.generate(
@@ -80,4 +101,5 @@ class RagService:
             citations=citations,
             sources_considered=len(chunks),
             model=generation.model,
+            insufficient_evidence=len(citations) == 0,
         )
