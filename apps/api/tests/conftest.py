@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator
+from pathlib import Path
 
 import httpx
 import pytest
@@ -9,7 +10,9 @@ from sqlalchemy.pool import StaticPool
 
 # Import models so Base.metadata is fully populated before create_all runs.
 import app.models  # noqa: F401,E402
+from app.config import Settings
 from app.database import Base
+from app.integrations.storage import LocalStorageBackend
 from app.main import create_app
 
 
@@ -51,16 +54,19 @@ async def db_session(
 
 @pytest_asyncio.fixture
 async def api_client(
-    db_session_factory: async_sessionmaker[AsyncSession],
+    db_session_factory: async_sessionmaker[AsyncSession], tmp_path: Path
 ) -> AsyncGenerator[httpx.AsyncClient, None]:
     """An async client whose DB-backed routes read/write the in-memory
     SQLite schema from `db_session_factory` instead of the real Postgres
-    URL. Skips the app's lifespan (no real engine/Redis needed for routes
-    that only touch app.state.session_factory) and stays on the same event
-    loop as the async fixtures it composes with, unlike the sync TestClient.
+    URL, and whose storage-backed routes write under a throwaway tmp_path
+    instead of the real filesystem/S3. Skips the app's lifespan (no real
+    engine/Redis needed for routes that only touch app.state) and stays on
+    the same event loop as the async fixtures it composes with, unlike the
+    sync TestClient.
     """
     app = create_app()
     app.state.session_factory = db_session_factory
+    app.state.storage_backend = LocalStorageBackend(Settings(local_storage_path=str(tmp_path)))
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:

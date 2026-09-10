@@ -66,6 +66,7 @@ class Settings(BaseSettings):
     # "s3" uses the s3_* settings above. See app/integrations/storage.py.
     storage_backend: Literal["local", "s3"] = "local"
     local_storage_path: str = "./storage"
+    max_upload_size_mb: int = 50
 
     @property
     def cors_origin_list(self) -> list[str]:
