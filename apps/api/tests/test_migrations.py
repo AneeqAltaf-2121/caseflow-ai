@@ -25,6 +25,7 @@ EXPECTED_TABLES = {
     "project_members",
     "documents",
     "document_versions",
+    "document_chunks",
     "conversations",
     "messages",
     "jobs",

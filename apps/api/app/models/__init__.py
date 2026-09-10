@@ -5,6 +5,7 @@ what Alembic's `env.py` targets for autogenerate/offline SQL rendering.
 """
 
 from app.models.audit_event import AuditEvent
+from app.models.chunk import EMBEDDING_DIMENSIONS, DocumentChunk
 from app.models.conversation import Conversation, Message, MessageRole
 from app.models.document import Document, DocumentStatus, DocumentVersion
 from app.models.job import Job, JobStatus
@@ -18,8 +19,10 @@ __all__ = [
     "Message",
     "MessageRole",
     "Document",
+    "DocumentChunk",
     "DocumentStatus",
     "DocumentVersion",
+    "EMBEDDING_DIMENSIONS",
     "Job",
     "JobStatus",
     "Organization",
