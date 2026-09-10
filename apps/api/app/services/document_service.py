@@ -19,15 +19,16 @@ from app.models.project import ProjectRole
 from app.repositories.document_repository import DocumentRepository
 from app.services.project_service import ProjectService
 
-# Content types accepted for ingestion (Phase 8 extracts text from these).
-# Anything else is rejected at upload time rather than silently accepted
-# and failing later in the pipeline.
+# Content types accepted for ingestion — kept in sync with the extractors
+# registered in app/ingestion/extractors/__init__.py. Anything else is
+# rejected at upload time rather than silently accepted and failing later
+# in the pipeline. Legacy binary .doc (application/msword) is deliberately
+# excluded: python-docx can't parse it, only modern .docx.
 ALLOWED_CONTENT_TYPES = {
     "text/plain",
     "text/markdown",
     "text/csv",
     "application/pdf",
-    "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 }
 
