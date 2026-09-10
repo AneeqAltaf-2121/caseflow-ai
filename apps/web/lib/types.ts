@@ -66,6 +66,22 @@ export interface HybridSearchResult {
   keyword_score: number | null;
 }
 
+export interface Citation {
+  source_number: number;
+  document_id: string;
+  document_chunk_id: string;
+  document_filename: string;
+  page_number: number;
+  quote: string;
+}
+
+export interface AskAnswer {
+  answer: string;
+  citations: Citation[];
+  sources_considered: number;
+  model: string;
+}
+
 export interface TokenPair {
   access_token: string;
   refresh_token: string;

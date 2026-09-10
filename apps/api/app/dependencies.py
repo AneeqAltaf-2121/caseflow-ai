@@ -17,6 +17,7 @@ from app.auth.jwt import TokenType, decode_token
 from app.config import Settings, get_settings
 from app.errors import UnauthorizedError
 from app.integrations.embeddings import EmbeddingProvider, get_embedding_provider
+from app.integrations.generation import GenerationProvider, get_generation_provider
 from app.integrations.storage import StorageBackend
 from app.retrieval.reranker import CrossEncoderReranker, Reranker
 
@@ -80,11 +81,20 @@ EmbeddingProviderDep = Annotated[EmbeddingProvider, Depends(get_embedding_provid
 
 
 def get_reranker() -> Reranker:
-    """CrossEncoderReranker is the only real implementation so far — no
-    settings-based selection yet (see app/retrieval/reranker.py); this
+    """CrossEncoderReranker by default — no settings-based selection yet
+    between it and LLMReranker (see app/retrieval/reranker.py); this
     dependency exists so that changes the same way EmbeddingProviderDep
-    would if/when an LLM-based reranker (Phase 18) is added."""
+    does, without touching every route that reranks."""
     return CrossEncoderReranker()
 
 
 RerankerDep = Annotated[Reranker, Depends(get_reranker)]
+
+
+def get_generation_provider_dep(settings: SettingsDep) -> GenerationProvider:
+    """Constructed per-request, same rationale as
+    get_embedding_provider_dep — see app/integrations/generation.py."""
+    return get_generation_provider(settings)
+
+
+GenerationProviderDep = Annotated[GenerationProvider, Depends(get_generation_provider_dep)]

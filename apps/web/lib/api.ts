@@ -2,6 +2,7 @@ import { API_URL } from "./config";
 import { clearTokens, getAccessToken, getRefreshToken, setTokens } from "./tokens";
 import type {
   ApiErrorBody,
+  AskAnswer,
   HybridSearchResult,
   Project,
   ProjectDocument,
@@ -173,6 +174,13 @@ export const api = {
     request<SearchResult[]>(`/projects/${projectId}/search/rerank`, {
       method: "POST",
       body: { query, limit },
+    }),
+
+  // --- rag ---
+  ask: (projectId: string, question: string, topK = 6) =>
+    request<AskAnswer>(`/projects/${projectId}/ask`, {
+      method: "POST",
+      body: { question, top_k: topK },
     }),
 };
 
