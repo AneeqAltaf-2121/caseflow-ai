@@ -12,6 +12,7 @@ from app.models.document import Document, DocumentStatus, DocumentVersion
 from app.models.job import Job, JobStatus
 from app.models.organization import Organization
 from app.models.project import Project, ProjectMember, ProjectRole
+from app.models.prompt_version import PromptVersion
 from app.models.user import User
 
 __all__ = [
@@ -31,5 +32,6 @@ __all__ = [
     "Project",
     "ProjectMember",
     "ProjectRole",
+    "PromptVersion",
     "User",
 ]

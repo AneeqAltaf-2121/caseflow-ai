@@ -13,10 +13,12 @@ from app.models.citation import Citation
 from app.models.conversation import Conversation, Message, MessageRole
 from app.models.project import ProjectRole
 from app.rag.history import build_history_text
+from app.rag.prompts import SYSTEM_PROMPT
 from app.rag.service import DEFAULT_TOP_K, RagService
 from app.rag.service import Citation as RagCitation
 from app.repositories.conversation_repository import ConversationRepository
 from app.services.project_service import ProjectService
+from app.services.prompt_version_service import RAG_ANSWER_PROMPT_NAME, PromptVersionService
 
 DEFAULT_TITLE = "Untitled"
 
@@ -55,10 +57,12 @@ class ConversationService:
         repository: ConversationRepository,
         project_service: ProjectService,
         rag_service: RagService,
+        prompt_version_service: PromptVersionService,
     ) -> None:
         self._repository = repository
         self._project_service = project_service
         self._rag_service = rag_service
+        self._prompt_version_service = prompt_version_service
 
     async def create_conversation(
         self, *, project_id: uuid.UUID, user_id: uuid.UUID, title: str = DEFAULT_TITLE
@@ -127,12 +131,20 @@ class ConversationService:
         )
         history_text = build_history_text(conversation.messages)
 
+        prompt_version = await self._prompt_version_service.get_or_seed_active(
+            project_id=project_id,
+            user_id=user_id,
+            name=RAG_ANSWER_PROMPT_NAME,
+            default_template=SYSTEM_PROMPT,
+        )
+
         answer = await self._rag_service.answer_question(
             project_id=project_id,
             user_id=user_id,
             query=content,
             top_k=top_k,
             history=history_text,
+            system_prompt=prompt_version.template,
         )
 
         user_message = await self._repository.add_message(
@@ -145,6 +157,11 @@ class ConversationService:
             role=MessageRole.ASSISTANT,
             content=answer.answer,
             citations=citation_rows,
+            # `answer.model == "none"` (Phase 20's zero-evidence short
+            # circuit) means no generation call was actually made — the
+            # prompt template was fetched but never used, so don't credit
+            # this message to it.
+            prompt_version_id=prompt_version.id if answer.model != "none" else None,
         )
         await self._repository.touch(conversation)
 

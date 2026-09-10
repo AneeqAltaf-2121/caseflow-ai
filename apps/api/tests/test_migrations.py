@@ -27,6 +27,7 @@ EXPECTED_TABLES = {
     "document_versions",
     "document_chunks",
     "citations",
+    "prompt_versions",
     "conversations",
     "messages",
     "jobs",

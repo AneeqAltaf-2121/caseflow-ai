@@ -63,6 +63,7 @@ class RagService:
         query: str,
         top_k: int = DEFAULT_TOP_K,
         history: str = "",
+        system_prompt: str | None = None,
     ) -> RagAnswer:
         results = await self._retrieval_service.retrieve(
             project_id=project_id, user_id=user_id, query=query, top_k=top_k
@@ -82,7 +83,10 @@ class RagService:
 
         context = build_context(chunks)
         generation = await self._generation_provider.generate(
-            system_prompt=SYSTEM_PROMPT,
+            # A caller (ConversationService, Phase 22) may supply the
+            # project's active PromptVersion.template here instead of the
+            # hardcoded default — see app/services/prompt_version_service.py.
+            system_prompt=system_prompt or SYSTEM_PROMPT,
             user_prompt=build_user_prompt(question=query, context=context, history=history),
         )
 

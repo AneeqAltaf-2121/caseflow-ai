@@ -13,11 +13,13 @@ from app.repositories.conversation_repository import ConversationRepository
 from app.repositories.document_repository import DocumentRepository
 from app.repositories.organization_repository import OrganizationRepository
 from app.repositories.project_repository import ProjectRepository
+from app.repositories.prompt_version_repository import PromptVersionRepository
 from app.repositories.user_repository import UserRepository
 from app.retrieval.reranker import MockReranker
 from app.services.conversation_service import ConversationService
 from app.services.hybrid_search_service import HybridSearchService
 from app.services.project_service import ProjectService
+from app.services.prompt_version_service import PromptVersionService
 from app.services.retrieval_service import RetrievalService
 
 pytestmark = pytest.mark.asyncio
@@ -77,10 +79,14 @@ async def _seed(db_session: AsyncSession, canned_response: str = "The term is 90
     rag_service = RagService(
         retrieval_service, MockGenerationProvider(canned_response=canned_response)
     )
+    prompt_version_service = PromptVersionService(
+        PromptVersionRepository(db_session), ProjectService(ProjectRepository(db_session))
+    )
     service = ConversationService(
         ConversationRepository(db_session),
         ProjectService(ProjectRepository(db_session)),
         rag_service,
+        prompt_version_service,
     )
     return service, owner, viewer, project
 
@@ -123,6 +129,10 @@ async def test_post_message_persists_user_and_assistant_messages_with_citations(
     assert len(result.citations) == 1
     assert result.citations[0].document_filename == "contract.txt"
     assert result.insufficient_evidence is False
+    # First message in the project auto-seeds an active "rag_answer"
+    # prompt version (Phase 22) and credits the assistant message to it.
+    assert result.assistant_message.prompt_version_id is not None
+    assert result.user_message.prompt_version_id is None
 
     # Simulates a fresh request/session: without this, the `conversation`
     # object already in this session's identity map (loaded once above,
