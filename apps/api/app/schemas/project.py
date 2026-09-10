@@ -7,7 +7,10 @@ from app.models.project import ProjectRole
 
 
 class ProjectCreate(BaseModel):
-    organization_id: uuid.UUID
+    # Optional: there's no organizations UI/API yet, so omitting this
+    # creates the project under the caller's auto-provisioned personal
+    # organization (see OrganizationRepository.get_or_create_personal).
+    organization_id: uuid.UUID | None = None
     name: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=10_000)
 
