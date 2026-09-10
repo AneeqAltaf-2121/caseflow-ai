@@ -1,0 +1,25 @@
+{
+  "name": "sample_contract_qa",
+  "version": 1,
+  "description": "A small hand-authored example dataset demonstrating the format — not tied to any real project's documents. Useful as a fixture for testing the evaluation framework itself before real per-project datasets exist.",
+  "examples": [
+    {
+      "id": "ex-001",
+      "question": "When does the agreement terminate?",
+      "expected_answer": "The agreement terminates 90 days after written notice from either party.",
+      "relevant_chunk_ids": []
+    },
+    {
+      "id": "ex-002",
+      "question": "What is the payment term?",
+      "expected_answer": "Payment is due net 30 from the invoice date.",
+      "relevant_chunk_ids": []
+    },
+    {
+      "id": "ex-003",
+      "question": "Is there an indemnification clause?",
+      "expected_answer": "Yes — the indemnification clause survives termination of the agreement.",
+      "relevant_chunk_ids": []
+    }
+  ]
+}

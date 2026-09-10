@@ -310,7 +310,15 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
 
 ### Install backend dependencies
 
-Follow the dependency configuration inside `apps/api`.
+```bash
+pip install -e "apps/api[dev]"
+pip install -e "packages/evals[dev]"
+```
+
+`packages/evals` is CaseFlow's evaluation framework (dataset format now;
+graders and evaluation-run orchestration in later phases) — a separate
+installable package, usable independently of the FastAPI app, that
+`apps/api` depends on at import time (see `apps/api/app/evals/`).
 
 ### Run the test suite
 
