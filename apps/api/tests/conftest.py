@@ -10,6 +10,7 @@ from sqlalchemy.pool import StaticPool
 
 # Import models so Base.metadata is fully populated before create_all runs.
 import app.models  # noqa: F401,E402
+import tests._bootstrap  # noqa: F401 - side effect must run first, see that module
 from app.config import Settings
 from app.database import Base
 from app.integrations.storage import LocalStorageBackend

@@ -9,9 +9,12 @@ import uuid
 
 from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import Response
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import CurrentUserIdDep, DbSessionDep, SettingsDep, StorageDep
+from app.jobs.ingestion import process_document_job
 from app.repositories.document_repository import DocumentRepository
+from app.repositories.job_repository import JobRepository
 from app.repositories.project_repository import ProjectRepository
 from app.schemas.document import DocumentRead
 from app.services.document_service import DocumentService, UploadedFile
@@ -22,6 +25,19 @@ router = APIRouter(prefix="/projects/{project_id}/documents", tags=["documents"]
 
 def _service(db: DbSessionDep, storage: StorageDep) -> DocumentService:
     return DocumentService(DocumentRepository(db), ProjectService(ProjectRepository(db)), storage)
+
+
+async def _enqueue_ingestion(db: AsyncSession, document_id: uuid.UUID) -> None:
+    """Create the durable Job record and publish the message. Commits
+    explicitly (rather than relying on get_db's commit-on-request-exit)
+    so the row is visible to a worker before it can possibly pick the
+    message up — enqueueing before committing is a real race in
+    production, even if it never shows up in single-process tests."""
+    job = await JobRepository(db).create(
+        type="document_ingestion", payload={"document_id": str(document_id)}
+    )
+    await db.commit()
+    process_document_job.send(str(job.id), str(document_id))
 
 
 @router.post("", response_model=DocumentRead, status_code=201)
@@ -44,6 +60,7 @@ async def upload_document(
         ),
         settings=settings,
     )
+    await _enqueue_ingestion(db, document.id)
     return DocumentRead.model_validate(document)
 
 
@@ -69,6 +86,7 @@ async def upload_new_version(
         ),
         settings=settings,
     )
+    await _enqueue_ingestion(db, document.id)
     return DocumentRead.model_validate(document)
 
 
