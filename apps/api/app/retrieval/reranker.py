@@ -3,8 +3,10 @@ retrieval's top candidates, narrowing 20-ish fused results down to the
 5-8 passages that actually go into the generation prompt (Phase 19).
 """
 
+import json
 from typing import Protocol
 
+from app.integrations.generation import GenerationProvider
 from app.models.chunk import DocumentChunk
 from app.retrieval.keyword import tokenize
 
@@ -74,3 +76,53 @@ class CrossEncoderReranker:
         ]
         scored.sort(key=lambda pair: pair[1], reverse=True)
         return scored[:top_k]
+
+
+class LLMReranker:
+    """Asks the configured GenerationProvider to rank candidates by
+    relevance to the query. Falls back to the input order if the model's
+    response can't be parsed as a valid permutation (malformed JSON, a
+    truncated list, an index out of range — includes
+    MockGenerationProvider's canned/echo text) rather than raising:
+    reranking failure should degrade to "don't reorder", never break
+    retrieval.
+    """
+
+    def __init__(self, generation_provider: GenerationProvider) -> None:
+        self._generation_provider = generation_provider
+
+    async def rerank(
+        self, query: str, candidates: Candidates, *, top_k: int = DEFAULT_TOP_K
+    ) -> Candidates:
+        if not candidates:
+            return []
+
+        listing = "\n".join(
+            f"[{i}] {chunk.text[:500]}" for i, (chunk, _score) in enumerate(candidates)
+        )
+        result = await self._generation_provider.generate(
+            system_prompt=(
+                "You rank passages by relevance to a question. Respond with ONLY a JSON "
+                "array of passage indices, most relevant first, e.g. [2, 0, 1]. Every "
+                "index must appear exactly once."
+            ),
+            user_prompt=f"Question: {query}\n\nPassages:\n{listing}",
+            temperature=0.0,
+            max_tokens=200,
+        )
+        order = self._parse_order(result.text, len(candidates))
+        return [candidates[i] for i in order][:top_k]
+
+    def _parse_order(self, text: str, n: int) -> list[int]:
+        try:
+            indices = json.loads(text)
+        except json.JSONDecodeError:
+            return list(range(n))
+
+        if (
+            isinstance(indices, list)
+            and all(isinstance(i, int) for i in indices)
+            and sorted(indices) == list(range(n))
+        ):
+            return indices
+        return list(range(n))
