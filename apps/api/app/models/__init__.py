@@ -14,6 +14,7 @@ from app.models.model_run import ModelRun, ModelRunStatus
 from app.models.organization import Organization
 from app.models.project import Project, ProjectMember, ProjectRole
 from app.models.prompt_version import PromptVersion
+from app.models.report import Report, ReportCitation, ReportSection, ReportStatus, ReportType
 from app.models.user import User
 
 __all__ = [
@@ -36,5 +37,10 @@ __all__ = [
     "ProjectMember",
     "ProjectRole",
     "PromptVersion",
+    "Report",
+    "ReportCitation",
+    "ReportSection",
+    "ReportStatus",
+    "ReportType",
     "User",
 ]

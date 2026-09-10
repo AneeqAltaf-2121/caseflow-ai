@@ -10,6 +10,9 @@ import type {
   Project,
   ProjectDocument,
   ProjectMember,
+  Report,
+  ReportDetail,
+  ReportType,
   SearchResult,
   TokenPair,
   User,
@@ -206,10 +209,20 @@ export const api = {
       method: "DELETE",
     }),
   postMessage: (projectId: string, conversationId: string, content: string, topK = 6) =>
-    request<PostMessageResponse>(`/projects/${projectId}/conversations/${conversationId}/messages`, {
+    request<PostMessageResponse>(
+      `/projects/${projectId}/conversations/${conversationId}/messages`,
+      { method: "POST", body: { content, top_k: topK } }
+    ),
+
+  // --- reports ---
+  createReport: (projectId: string, reportType: ReportType, title: string) =>
+    request<Report>(`/projects/${projectId}/reports`, {
       method: "POST",
-      body: { content, top_k: topK },
+      body: { report_type: reportType, title },
     }),
+  listReports: (projectId: string) => request<Report[]>(`/projects/${projectId}/reports`),
+  getReport: (projectId: string, reportId: string) =>
+    request<ReportDetail>(`/projects/${projectId}/reports/${reportId}`),
 };
 
 export { API_URL };
