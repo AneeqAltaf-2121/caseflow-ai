@@ -22,8 +22,7 @@ class AuditAction(enum.StrEnum):
     DOCUMENT_DELETED = "document.deleted"
     REPORT_GENERATED = "report.generated"
     EVALUATION_RUN_CREATED = "evaluation_run.created"
-    # Human review (Phase 37) writes HUMAN_REVIEW_COMPLETED once that
-    # feature exists — not wired yet, no review workflow to audit.
+    # Wired in Phase 37 — HumanReviewService.submit_decision.
     HUMAN_REVIEW_COMPLETED = "human_review.completed"
 
 
@@ -33,3 +32,4 @@ class AuditTargetType(enum.StrEnum):
     DOCUMENT = "document"
     REPORT = "report"
     EVALUATION_RUN = "evaluation_run"
+    HUMAN_REVIEW = "human_review"

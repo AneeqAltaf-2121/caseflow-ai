@@ -24,6 +24,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [error, setError] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [flaggedIds, setFlaggedIds] = useState<Set<string>>(new Set());
 
   async function loadConversations() {
     try {
@@ -99,6 +100,15 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       if (activeId === conversationId) await loadDetail(conversationId);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to rename conversation.");
+    }
+  }
+
+  async function handleFlag(messageId: string) {
+    try {
+      await api.flagMessageForReview(id, messageId);
+      setFlaggedIds((prev) => new Set(prev).add(messageId));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to flag this answer for review.");
     }
   }
 
@@ -229,6 +239,13 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
                       <p className="whitespace-pre-wrap text-sm text-zinc-800 dark:text-zinc-200">
                         {message.content}
                       </p>
+                      <button
+                        onClick={() => handleFlag(message.id)}
+                        disabled={flaggedIds.has(message.id)}
+                        className="mt-2 text-xs font-medium text-zinc-400 hover:text-zinc-700 disabled:text-emerald-600 dark:hover:text-zinc-200 dark:disabled:text-emerald-400"
+                      >
+                        {flaggedIds.has(message.id) ? "✓ Flagged for review" : "Flag for review"}
+                      </button>
                       {message.citations.length > 0 && (
                         <div className="mt-3 flex flex-col gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
                           <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">

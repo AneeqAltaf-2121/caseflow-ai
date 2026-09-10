@@ -9,6 +9,7 @@ from app.api.routes import (
     documents,
     evaluations,
     health,
+    human_reviews,
     projects,
     prompt_versions,
     rag,
@@ -28,3 +29,4 @@ api_router.include_router(prompt_versions.router)
 api_router.include_router(reports.router)
 api_router.include_router(evaluations.router)
 api_router.include_router(costs.router)
+api_router.include_router(human_reviews.router)

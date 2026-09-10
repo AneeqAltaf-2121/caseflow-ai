@@ -10,6 +10,7 @@ from app.models.citation import Citation
 from app.models.conversation import Conversation, Message, MessageRole
 from app.models.document import Document, DocumentStatus, DocumentVersion
 from app.models.evaluation import EvaluationResult, EvaluationRun, EvaluationRunStatus
+from app.models.human_review import HumanReview, HumanReviewStatus
 from app.models.job import Job, JobStatus
 from app.models.model_run import ModelRun, ModelRunStatus
 from app.models.organization import Organization
@@ -32,6 +33,8 @@ __all__ = [
     "EvaluationResult",
     "EvaluationRun",
     "EvaluationRunStatus",
+    "HumanReview",
+    "HumanReviewStatus",
     "Job",
     "JobStatus",
     "ModelRun",

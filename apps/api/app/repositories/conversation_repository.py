@@ -44,6 +44,17 @@ class ConversationRepository:
         )
         return list(result.scalars().all())
 
+    async def get_message_by_id(self, message_id: uuid.UUID) -> Message | None:
+        """Eager-loads the owning Conversation (Phase 37 human review needs
+        `message.conversation.project_id` to confirm a message actually
+        belongs to the project a reviewer is acting in)."""
+        result = await self._session.execute(
+            select(Message)
+            .where(Message.id == message_id)
+            .options(selectinload(Message.conversation))
+        )
+        return result.scalar_one_or_none()
+
     async def update_title(self, conversation: Conversation, title: str) -> Conversation:
         conversation.title = title
         await self._session.flush()
