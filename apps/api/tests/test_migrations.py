@@ -32,6 +32,8 @@ EXPECTED_TABLES = {
     "reports",
     "report_sections",
     "report_citations",
+    "evaluation_runs",
+    "evaluation_results",
     "conversations",
     "messages",
     "jobs",

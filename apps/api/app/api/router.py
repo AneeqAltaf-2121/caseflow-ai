@@ -6,6 +6,7 @@ from app.api.routes import (
     auth,
     conversations,
     documents,
+    evaluations,
     health,
     projects,
     prompt_versions,
@@ -24,3 +25,4 @@ api_router.include_router(rag.router)
 api_router.include_router(conversations.router)
 api_router.include_router(prompt_versions.router)
 api_router.include_router(reports.router)
+api_router.include_router(evaluations.router)
