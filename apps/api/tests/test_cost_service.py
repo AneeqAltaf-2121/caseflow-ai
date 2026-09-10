@@ -1,6 +1,7 @@
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.cache import InMemoryCache
 from app.errors import NotFoundError
 from app.models.model_run import ModelRunStatus
 from app.repositories.model_run_repository import ModelRunRepository
@@ -102,3 +103,30 @@ async def test_cost_summary_requires_project_membership(db_session: AsyncSession
 
     with pytest.raises(NotFoundError):
         await service.get_cost_summary(project_id=project.id, user_id=outsider.id)
+
+
+async def test_cost_summary_served_from_cache_on_second_call(db_session: AsyncSession) -> None:
+    owner, _outsider, project = await _seed_project(db_session)
+    await _create_model_run(
+        db_session, project_id=project.id, user_id=owner.id, model="gpt-4o-mini", cost_usd=0.05
+    )
+    cache = InMemoryCache()
+    service = CostService(
+        ModelRunRepository(db_session), ProjectService(ProjectRepository(db_session)), cache
+    )
+
+    first = await service.get_cost_summary(project_id=project.id, user_id=owner.id)
+    assert first.total_cost_usd == pytest.approx(0.05)
+
+    # A new ModelRun lands after the first call but the cached summary
+    # (60s TTL) doesn't see it yet — proves the second call is actually
+    # served from cache, not just recomputing the same answer.
+    await _create_model_run(
+        db_session, project_id=project.id, user_id=owner.id, model="gpt-4o-mini", cost_usd=0.07
+    )
+    second = await service.get_cost_summary(project_id=project.id, user_id=owner.id)
+    assert second.total_cost_usd == pytest.approx(0.05)
+
+    await cache.delete("cost_summary:v1:" + str(project.id))
+    third = await service.get_cost_summary(project_id=project.id, user_id=owner.id)
+    assert third.total_cost_usd == pytest.approx(0.12)

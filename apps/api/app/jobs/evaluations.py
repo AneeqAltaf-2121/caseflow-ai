@@ -25,6 +25,7 @@ import structlog
 from caseflow_evals import EvaluationDataset, load_dataset
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.cache import get_cache
 from app.config import get_settings
 from app.database import create_engine, create_session_factory
 from app.evals.dataset_paths import DatasetNotFoundError, resolve_dataset_path
@@ -116,8 +117,15 @@ async def run_evaluation(
         await session.commit()
 
         chunk_repository = DocumentChunkRepository(session)
+        # Phase 33: caching pays off doubly here — evaluate_retrieval()
+        # and rag_service.answer_question() each retrieve for the same
+        # query per example (see the docstring above this loop), so the
+        # second call is a cache hit instead of a repeated DB round trip.
         hybrid_service = HybridSearchService(
-            chunk_repository, ProjectService(ProjectRepository(session)), embedding_provider
+            chunk_repository,
+            ProjectService(ProjectRepository(session)),
+            embedding_provider,
+            get_cache(),
         )
         retrieval_service = RetrievalService(hybrid_service, reranker)
         rag_service = RagService(retrieval_service, generation_provider)

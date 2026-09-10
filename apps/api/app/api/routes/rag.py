@@ -6,6 +6,7 @@ import uuid
 
 from fastapi import APIRouter
 
+from app.cache import get_cache
 from app.dependencies import (
     CurrentUserIdDep,
     DbSessionDep,
@@ -35,7 +36,10 @@ async def ask_question(
     generation_provider: GenerationProviderDep,
 ) -> AskAnswerRead:
     hybrid_service = HybridSearchService(
-        DocumentChunkRepository(db), ProjectService(ProjectRepository(db)), embedding_provider
+        DocumentChunkRepository(db),
+        ProjectService(ProjectRepository(db)),
+        embedding_provider,
+        get_cache(),
     )
     retrieval_service = RetrievalService(hybrid_service, reranker)
     rag_service = RagService(retrieval_service, generation_provider)
