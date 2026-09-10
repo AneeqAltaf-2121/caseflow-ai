@@ -2,6 +2,7 @@ import { API_URL } from "./config";
 import { clearTokens, getAccessToken, getRefreshToken, setTokens } from "./tokens";
 import type {
   ApiErrorBody,
+  HybridSearchResult,
   Project,
   ProjectDocument,
   ProjectMember,
@@ -155,6 +156,16 @@ export const api = {
   // --- search ---
   semanticSearch: (projectId: string, query: string, limit = 10) =>
     request<SearchResult[]>(`/projects/${projectId}/search`, {
+      method: "POST",
+      body: { query, limit },
+    }),
+  keywordSearch: (projectId: string, query: string, limit = 10) =>
+    request<SearchResult[]>(`/projects/${projectId}/search/keyword`, {
+      method: "POST",
+      body: { query, limit },
+    }),
+  hybridSearch: (projectId: string, query: string, limit = 10) =>
+    request<HybridSearchResult[]>(`/projects/${projectId}/search/hybrid`, {
       method: "POST",
       body: { query, limit },
     }),
