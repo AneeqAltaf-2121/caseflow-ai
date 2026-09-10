@@ -80,6 +80,7 @@ export interface AskAnswer {
   citations: Citation[];
   sources_considered: number;
   model: string;
+  insufficient_evidence: boolean;
 }
 
 export interface TokenPair {

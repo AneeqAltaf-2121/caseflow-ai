@@ -22,3 +22,4 @@ class AskAnswerRead(BaseModel):
     citations: list[CitationRead]
     sources_considered: int
     model: str
+    insufficient_evidence: bool

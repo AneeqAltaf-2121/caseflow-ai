@@ -58,4 +58,5 @@ async def ask_question(
         ],
         sources_considered=answer.sources_considered,
         model=answer.model,
+        insufficient_evidence=answer.insufficient_evidence,
     )

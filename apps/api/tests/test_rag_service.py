@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.integrations.embeddings import LocalEmbeddingProvider
 from app.integrations.generation import MockGenerationProvider
 from app.models.chunk import DocumentChunk
+from app.rag.grounding import INSUFFICIENT_EVIDENCE_MESSAGE
 from app.rag.service import RagService
 from app.repositories.chunk_repository import DocumentChunkRepository
 from app.repositories.document_repository import DocumentRepository
@@ -83,9 +84,12 @@ async def test_answer_question_returns_valid_citation(db_session: AsyncSession) 
     assert answer.citations[0].source_number == 1
     assert answer.citations[0].document_filename == "contract.txt"
     assert answer.citations[0].page_number == 1
+    assert answer.insufficient_evidence is False
 
 
-async def test_answer_with_no_citations_in_model_output(db_session: AsyncSession) -> None:
+async def test_answer_with_no_citations_in_model_output_is_flagged_insufficient(
+    db_session: AsyncSession,
+) -> None:
     owner, project, embedder = await _seed_project_with_chunk(db_session)
     service = _build_rag_service(db_session, embedder, canned_response="I don't know.")
 
@@ -95,6 +99,10 @@ async def test_answer_with_no_citations_in_model_output(db_session: AsyncSession
 
     assert answer.citations == []
     assert answer.sources_considered == 1
+    assert answer.insufficient_evidence is True
+    # The model's real text is preserved — insufficient_evidence is a
+    # warning flag, not a silent rewrite of what the model said.
+    assert answer.answer == "I don't know."
 
 
 async def test_answer_question_with_no_matching_documents(db_session: AsyncSession) -> None:
@@ -121,3 +129,8 @@ async def test_answer_question_with_no_matching_documents(db_session: AsyncSessi
 
     assert answer.sources_considered == 0
     assert answer.citations == []
+    assert answer.insufficient_evidence is True
+    # No chunks at all -> no generation call is made; the canned message
+    # is returned directly rather than the mock's configured response.
+    assert answer.answer == INSUFFICIENT_EVIDENCE_MESSAGE
+    assert answer.model == "none"

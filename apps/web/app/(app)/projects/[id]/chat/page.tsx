@@ -64,6 +64,11 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
               {turn.question}
             </p>
             <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+              {turn.answer.insufficient_evidence && turn.answer.sources_considered > 0 && (
+                <p className="mb-2 rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                  ⚠ This answer cited no sources — treat it as unverified.
+                </p>
+              )}
               <p className="whitespace-pre-wrap text-sm text-zinc-800 dark:text-zinc-200">
                 {turn.answer.answer}
               </p>
