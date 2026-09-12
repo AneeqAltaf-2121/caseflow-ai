@@ -8,6 +8,7 @@ single source of truth for "who can see/write this document".
 """
 
 import hashlib
+import re
 import uuid
 from dataclasses import dataclass
 
@@ -41,6 +42,23 @@ class UploadedFile:
     filename: str
     content_type: str
     data: bytes
+
+
+# Phase 38: a filename is untrusted client input that ends up in three
+# places a naive value could cause real damage — an object storage key
+# (path traversal, already independently guarded by
+# LocalStorageBackend._path_for's resolve+parents check), a DB column
+# shown back in the UI, and a raw Content-Disposition header value on
+# download (CRLF/header injection, or breaking the header's own quoting
+# with an embedded `"`). Stripping path separators and control/quote
+# characters up front makes all three safe without each call site having
+# to remember to escape it differently.
+_UNSAFE_FILENAME_CHARS = re.compile(r'[\x00-\x1f\x7f"\\/]')
+
+
+def sanitize_filename(filename: str) -> str:
+    cleaned = _UNSAFE_FILENAME_CHARS.sub("_", filename).strip().strip(".")
+    return cleaned or "untitled"
 
 
 class DocumentService:
@@ -87,6 +105,7 @@ class DocumentService:
             allowed={ProjectRole.OWNER, ProjectRole.EDITOR},
         )
         self._validate(file, settings=settings)
+        safe_filename = sanitize_filename(file.filename)
 
         checksum = hashlib.sha256(file.data).hexdigest()
 
@@ -105,13 +124,13 @@ class DocumentService:
                 f"({existing.filename!r}, id={existing.id})."
             )
 
-        storage_key = f"projects/{project_id}/{uuid.uuid4().hex}/{file.filename}"
+        storage_key = f"projects/{project_id}/{uuid.uuid4().hex}/{safe_filename}"
 
         await self._storage.put(key=storage_key, data=file.data)
         try:
             document = await self._repository.create(
                 project_id=project_id,
-                filename=file.filename,
+                filename=safe_filename,
                 content_type=file.content_type,
                 size_bytes=len(file.data),
                 checksum_sha256=checksum,
@@ -198,7 +217,7 @@ class DocumentService:
         )
 
         checksum = hashlib.sha256(file.data).hexdigest()
-        storage_key = f"projects/{project_id}/{uuid.uuid4().hex}/{file.filename}"
+        storage_key = f"projects/{project_id}/{uuid.uuid4().hex}/{sanitize_filename(file.filename)}"
 
         await self._storage.put(key=storage_key, data=file.data)
         try:

@@ -6,6 +6,7 @@ here — see docs/domain-model.md.
 """
 
 import uuid
+from urllib.parse import quote
 
 from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import Response
@@ -23,6 +24,20 @@ from app.services.document_service import DocumentService, UploadedFile
 from app.services.project_service import ProjectService
 
 router = APIRouter(prefix="/projects/{project_id}/documents", tags=["documents"])
+
+
+def _content_disposition(filename: str) -> str:
+    """RFC 6266 encoding for the download filename (Phase 38 defense in
+    depth — DocumentService.sanitize_filename already strips characters
+    that would let this header be malformed or injected into, but a
+    header value should never trust untrusted text at all if avoidable).
+    A plain ASCII fallback (quotes/backslashes escaped) covers older
+    clients that don't understand filename*; UTF-8 percent-encoding in
+    filename* covers everything else correctly."""
+    ascii_fallback = filename.encode("ascii", errors="replace").decode("ascii")
+    ascii_fallback = ascii_fallback.replace("\\", "\\\\").replace('"', '\\"')
+    encoded = quote(filename, safe="")
+    return f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{encoded}"
 
 
 def _service(db: DbSessionDep, storage: StorageDep) -> DocumentService:
@@ -149,5 +164,5 @@ async def download_document(
     return Response(
         content=data,
         media_type=document.content_type,
-        headers={"Content-Disposition": f'attachment; filename="{document.filename}"'},
+        headers={"Content-Disposition": _content_disposition(document.filename)},
     )

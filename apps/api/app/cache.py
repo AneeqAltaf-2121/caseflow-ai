@@ -52,6 +52,7 @@ class Cache(Protocol):
         self, key: str, value: str, *, ttl_seconds: int = DEFAULT_TTL_SECONDS
     ) -> None: ...
     async def delete(self, key: str) -> None: ...
+    async def increment(self, key: str, *, ttl_seconds: int) -> int: ...
 
 
 class RedisCache:
@@ -66,6 +67,19 @@ class RedisCache:
 
     async def delete(self, key: str) -> None:
         await self._client.delete(key)
+
+    async def increment(self, key: str, *, ttl_seconds: int) -> int:
+        """Atomic INCR, with the expiry set only on the increment that
+        creates the key — the standard Redis fixed-window counter
+        pattern (Phase 38 rate limiting). A concurrent burst of requests
+        racing this still gets a correct count: INCR itself is atomic,
+        only the "was this the first one" expiry check reads back the
+        result, and setting an already-set TTL again would just be a
+        harmless no-op if two requests both saw value == 1."""
+        value = await self._client.incr(key)
+        if value == 1:
+            await self._client.expire(key, ttl_seconds)
+        return value
 
 
 class InMemoryCache:
@@ -92,6 +106,17 @@ class InMemoryCache:
 
     async def delete(self, key: str) -> None:
         self._store.pop(key, None)
+
+    async def increment(self, key: str, *, ttl_seconds: int) -> int:
+        """Not atomic (no concurrent access within a single test process
+        needs it to be) and, unlike RedisCache, resets the TTL on every
+        call rather than only the first — a documented simplification
+        that's harmless for this backend's only real use, single-process
+        tests, where windows aren't asserted down to the second."""
+        current = await self.get(key)
+        new_value = int(current) + 1 if current is not None else 1
+        await self.set(key, str(new_value), ttl_seconds=ttl_seconds)
+        return new_value
 
 
 def _create_cache() -> Cache:

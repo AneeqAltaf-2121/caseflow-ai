@@ -45,6 +45,11 @@ class ConflictError(CaseFlowError):
     code = "conflict"
 
 
+class RateLimitExceededError(CaseFlowError):
+    status_code = status.HTTP_429_TOO_MANY_REQUESTS
+    code = "rate_limited"
+
+
 def _error_body(code: str, message: str, request_id: str | None) -> dict:
     return {"error": {"code": code, "message": message, "request_id": request_id}}
 

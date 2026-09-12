@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.middleware import request_context_middleware
+from app.api.middleware import rate_limit_middleware, request_context_middleware
 from app.api.router import api_router
 from app.config import get_settings
 from app.database import create_engine, create_session_factory
@@ -52,6 +52,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.middleware("http")(rate_limit_middleware)
     app.middleware("http")(request_context_middleware)
 
     app.add_exception_handler(CaseFlowError, caseflow_error_handler)
