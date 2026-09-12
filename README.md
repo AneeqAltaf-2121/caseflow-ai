@@ -348,6 +348,36 @@ mypy app
 
 ---
 
+## Docker
+
+The entire stack — Postgres (with pgvector), Redis, the API, the
+background worker, and the frontend — runs with one command and no local
+Python/Node toolchain, database, or API credentials (every AI provider
+defaults to `mock`):
+
+```bash
+docker compose up --build
+```
+
+This boots six services: `postgres` and `redis` (with health checks),
+`migrate` (a one-shot `alembic upgrade head`, so `api`/`worker` never race
+to apply the same revision), `api` (http://localhost:8000), `worker`
+(the Dramatiq consumer — same image as `api`, different command), and
+`web` (http://localhost:3000). `api`/`worker` wait for `migrate` to exit
+successfully and for Postgres/Redis to report healthy before starting;
+`web` waits for `api`'s own `/health` check.
+
+Override any provider/credential via a `.env` file at the repo root
+(read by `docker compose` automatically) — e.g. `LLM_PROVIDER=openai` and
+`OPENAI_API_KEY=...` to use a real model instead of the mock provider.
+
+```bash
+docker compose down          # stop everything
+docker compose down -v       # also delete the Postgres/Redis/storage volumes
+```
+
+---
+
 ## Environment Configuration
 
 Copy the environment template:

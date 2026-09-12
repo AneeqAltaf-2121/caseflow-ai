@@ -1,0 +1,23 @@
+# Keeps the build context small and Docker layer caching effective —
+# none of this needs to be sent to the daemon or copied into an image.
+
+**/.git
+**/.venv
+**/venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/node_modules
+**/.next
+**/dist
+**/build
+**/*.egg-info
+**/.env
+**/.env.*
+!**/.env.example
+**/storage
+apps/api/.venv
+infra/aws/**/.terraform
+infra/aws/**/*.tfstate*

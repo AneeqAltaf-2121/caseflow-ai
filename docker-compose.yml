@@ -1,9 +1,35 @@
 version: "3.9"
 
-# CaseFlow AI — local development environment.
-# Phase 0: Postgres + Redis skeleton only.
-# apps/api, apps/web, and the worker service are added to this file
-# in Phase 24 once those applications exist.
+# CaseFlow AI — local development environment (Phase 39: every service).
+#
+# `docker compose up --build` boots the full stack: Postgres, Redis, one
+# migration run, the API, the background worker, and the frontend — no
+# local Python/Node toolchain, database, or credentials needed. Every
+# provider defaults to "mock" (see .env.example), so this runs completely
+# offline out of the box.
+#
+# api/worker/web all build from the same source with docker-compose's own
+# build caching; migrate/api/worker share one image (see
+# apps/api/Dockerfile's docstring on why).
+
+x-backend-env: &backend-env
+  ENVIRONMENT: development
+  DATABASE_URL: postgresql+asyncpg://caseflow:caseflow@postgres:5432/caseflow
+  REDIS_URL: redis://redis:6379/0
+  API_HOST: 0.0.0.0
+  API_PORT: 8000
+  CORS_ORIGINS: http://localhost:3000
+  OAUTH_CLIENT_ID: ${OAUTH_CLIENT_ID:-}
+  OAUTH_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET:-}
+  OAUTH_REDIRECT_URL: http://localhost:3000/login/callback
+  JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-insecure-secret-change-me-before-deploying}
+  ALLOW_MOCK_OAUTH: "true"
+  LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+  EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-mock}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  STORAGE_BACKEND: local
+  LOCAL_STORAGE_PATH: /app/storage
 
 services:
   postgres:
@@ -38,6 +64,80 @@ services:
       timeout: 5s
       retries: 10
 
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: caseflow-migrate
+    environment:
+      <<: *backend-env
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # No `restart:` — a one-shot job. api/worker wait for it to exit 0
+    # (service_completed_successfully) rather than running migrations
+    # themselves, so two processes never race to apply the same revision.
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: caseflow-api
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+    ports:
+      - "8000:8000"
+    volumes:
+      - caseflow_storage:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: caseflow-worker
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+    command: ["dramatiq", "app.jobs.worker", "--processes", "1", "--threads", "2"]
+    volumes:
+      - caseflow_storage:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    # No HEALTHCHECK: a Dramatiq worker doesn't serve HTTP, and container
+    # liveness (is the process still running) is all `docker compose ps`
+    # can meaningfully report for it here.
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    container_name: caseflow-web
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
 volumes:
   caseflow_postgres_data:
   caseflow_redis_data:
+  caseflow_storage:
