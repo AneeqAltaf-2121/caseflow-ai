@@ -38,7 +38,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   }
 
   useEffect(() => {
-    void loadConversations();
+    void Promise.resolve().then(loadConversations);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 

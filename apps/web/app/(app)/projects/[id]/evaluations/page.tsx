@@ -166,7 +166,7 @@ export default function EvaluationsPage({ params }: { params: Promise<{ id: stri
   }
 
   useEffect(() => {
-    void loadRuns();
+    void Promise.resolve().then(loadRuns);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -185,8 +185,10 @@ export default function EvaluationsPage({ params }: { params: Promise<{ id: stri
   useEffect(() => {
     if (!activeId) return;
     statusRef.current = null;
-    setExpandedResultId(null);
-    void loadDetail(activeId);
+    void Promise.resolve().then(() => {
+      setExpandedResultId(null);
+      return loadDetail(activeId);
+    });
     // Poll while a run is still grading in the background; stops itself
     // once the status settles rather than polling forever.
     const interval = setInterval(() => {

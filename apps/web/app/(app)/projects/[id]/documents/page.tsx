@@ -50,7 +50,7 @@ export default function DocumentsPage({ params }: { params: Promise<{ id: string
   }, [id]);
 
   useEffect(() => {
-    void load();
+    void Promise.resolve().then(load);
   }, [load]);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {

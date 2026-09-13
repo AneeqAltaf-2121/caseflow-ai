@@ -16,19 +16,21 @@ function GoogleCallbackInner() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const code = searchParams.get("code");
-    const oauthError = searchParams.get("error");
-    if (oauthError) {
-      setError(`Google sign-in was cancelled or failed (${oauthError}).`);
-      return;
-    }
-    if (!code) {
-      setError("Missing authorization code from Google.");
-      return;
-    }
-    completeGoogleLogin(code)
-      .then(() => router.replace("/dashboard"))
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Sign-in failed."));
+    void Promise.resolve().then(() => {
+      const code = searchParams.get("code");
+      const oauthError = searchParams.get("error");
+      if (oauthError) {
+        setError(`Google sign-in was cancelled or failed (${oauthError}).`);
+        return undefined;
+      }
+      if (!code) {
+        setError("Missing authorization code from Google.");
+        return undefined;
+      }
+      return completeGoogleLogin(code)
+        .then(() => router.replace("/dashboard"))
+        .catch((err) => setError(err instanceof ApiError ? err.message : "Sign-in failed."));
+    });
   }, [searchParams, completeGoogleLogin, router]);
 
   return (

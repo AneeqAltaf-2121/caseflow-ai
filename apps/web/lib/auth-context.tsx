@@ -42,7 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    void refreshUser();
+    void Promise.resolve().then(refreshUser);
   }, [refreshUser]);
 
   const loginWithMock = useCallback(

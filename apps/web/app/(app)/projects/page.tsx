@@ -28,7 +28,7 @@ export default function ProjectsPage() {
   }
 
   useEffect(() => {
-    void load();
+    void Promise.resolve().then(load);
   }, []);
 
   async function handleCreate(e: React.FormEvent) {
