@@ -1,5 +1,7 @@
 # CaseFlow AI
 
+[![CI](https://github.com/AneeqAltaf-2121/caseflow-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/AneeqAltaf-2121/caseflow-ai/actions/workflows/ci.yml)
+
 **CaseFlow AI** is a full-stack AI research and document intelligence platform for organizing document collections, performing semantic and hybrid search, generating citation-grounded answers and reports, and evaluating AI system quality across models, prompts, and retrieval strategies.
 
 The project is being built as a production-oriented AI platform rather than a standalone "chat with documents" demo. Its architecture is designed around multi-user workspaces, asynchronous document processing, retrieval-augmented generation (RAG), AI evaluation, observability, and reproducible model experimentation.
