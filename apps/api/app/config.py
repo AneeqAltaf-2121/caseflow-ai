@@ -76,6 +76,16 @@ class Settings(BaseSettings):
     local_storage_path: str = "./storage"
     max_upload_size_mb: int = 50
 
+    # Runs a dramatiq Worker in background threads inside the API
+    # process itself instead of relying on a separate `worker` process
+    # (see app/jobs/inline_worker.py) — off by default; docker-compose
+    # and any real deployment run a dedicated worker service (Phase 39)
+    # against real Redis instead. Exists for running the full app with
+    # zero extra infrastructure: a plain `uvicorn app.main:app` (no
+    # Docker, no Redis) still actually processes background jobs when
+    # this is set, which is what Phase 41's E2E tests run against.
+    run_inline_worker: bool = False
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]

@@ -15,6 +15,7 @@ from app.config import get_settings
 from app.database import create_engine, create_session_factory
 from app.errors import CaseFlowError, caseflow_error_handler, unhandled_exception_handler
 from app.integrations.storage import get_storage_backend
+from app.jobs.inline_worker import start_inline_worker, stop_inline_worker
 from app.logging import configure_logging
 from app.redis import create_redis_client
 
@@ -30,8 +31,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.redis_client = create_redis_client(settings)
     app.state.storage_backend = get_storage_backend(settings)
 
+    if settings.run_inline_worker:
+        start_inline_worker()
+
     yield
 
+    if settings.run_inline_worker:
+        stop_inline_worker()
     await app.state.redis_client.aclose()
     await engine.dispose()
 
