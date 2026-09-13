@@ -101,3 +101,18 @@ crash.log
 # ============================================
 
 docker-compose.override.yml
+
+# ============================================
+# Playwright (Phase 41 end-to-end tests)
+# ============================================
+
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/blob-report/
+apps/web/playwright/.cache/
+
+# ============================================
+# Local throwaway E2E backend DB (see apps/web/e2e/README.md)
+# ============================================
+
+apps/api/e2e.db
