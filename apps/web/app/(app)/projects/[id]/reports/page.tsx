@@ -49,7 +49,7 @@ export default function ReportsPage({ params }: { params: Promise<{ id: string }
   }
 
   useEffect(() => {
-    void loadReports();
+    void Promise.resolve().then(loadReports);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -68,7 +68,7 @@ export default function ReportsPage({ params }: { params: Promise<{ id: string }
   useEffect(() => {
     if (!activeId) return;
     statusRef.current = null;
-    void loadDetail(activeId);
+    void Promise.resolve().then(() => loadDetail(activeId));
     // Poll while a report is still being generated in the background;
     // stops itself once the status settles rather than polling forever.
     const interval = setInterval(() => {

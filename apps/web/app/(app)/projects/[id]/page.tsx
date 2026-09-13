@@ -28,10 +28,12 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
   const [costs, setCosts] = useState<CostSummary | null>(null);
 
   useEffect(() => {
-    if (project) {
-      setName(project.name);
-      setDescription(project.description ?? "");
-    }
+    void Promise.resolve().then(() => {
+      if (project) {
+        setName(project.name);
+        setDescription(project.description ?? "");
+      }
+    });
   }, [project]);
 
   async function loadMembers() {
@@ -43,7 +45,7 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
   }
 
   useEffect(() => {
-    void loadMembers();
+    void Promise.resolve().then(loadMembers);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 

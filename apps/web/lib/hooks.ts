@@ -22,7 +22,7 @@ export function useProject(projectId: string) {
   }, [projectId]);
 
   useEffect(() => {
-    void reload();
+    void Promise.resolve().then(reload);
   }, [reload]);
 
   return { project, error, loading, reload };

@@ -46,8 +46,10 @@ export default function ReviewsPage({ params }: { params: Promise<{ id: string }
   }
 
   useEffect(() => {
-    setReviews(null);
-    void loadReviews();
+    void Promise.resolve().then(() => {
+      setReviews(null);
+      return loadReviews();
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, filter]);
 
