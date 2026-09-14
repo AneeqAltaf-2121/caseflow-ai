@@ -67,6 +67,15 @@ variable "worker_command" {
   default     = ["python", "-m", "app.worker"]
 }
 
+variable "api_secrets" {
+  description = "Secrets Manager ARNs injected as environment variables into the api and worker containers (Phase 51) — {name, valueFrom} pairs, ECS's own `secrets` container-definition shape. Both share the same list since they share the same image."
+  type = list(object({
+    name      = string
+    valueFrom = string
+  }))
+  default = []
+}
+
 variable "api_desired_count" {
   type    = number
   default = 1

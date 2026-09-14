@@ -23,7 +23,7 @@ locals {
 #   Phase 48 -> module "s3"
 #   Phase 49 -> module "ecs" (+ module "iam" for task roles)
 #   Phase 50 -> module "alb" (ecs services attach to its target groups)
-#   Phase 51 -> module "secrets"
+#   Phase 51 -> module "secrets" (ecs's api/worker containers inject its ARNs)
 #   Phase 52 -> module "observability"
 
 module "networking" {
@@ -66,6 +66,13 @@ module "iam" {
   tags                 = local.common_tags
 }
 
+module "secrets" {
+  source = "../../modules/secrets"
+
+  name_prefix = local.name_prefix
+  tags        = local.common_tags
+}
+
 module "alb" {
   source = "../../modules/alb"
 
@@ -87,4 +94,11 @@ module "ecs" {
   api_target_group_arn    = module.alb.api_target_group_arn
   web_target_group_arn    = module.alb.web_target_group_arn
   tags                    = local.common_tags
+
+  api_secrets = [
+    { name = "OAUTH_CLIENT_SECRET", valueFrom = module.secrets.oauth_client_secret_arn },
+    { name = "ANTHROPIC_API_KEY", valueFrom = module.secrets.anthropic_api_key_arn },
+    { name = "OPENAI_API_KEY", valueFrom = module.secrets.openai_api_key_arn },
+    { name = "JWT_SECRET_KEY", valueFrom = module.secrets.jwt_secret_key_arn },
+  ]
 }
