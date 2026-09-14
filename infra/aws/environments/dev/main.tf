@@ -16,9 +16,8 @@ locals {
 }
 
 # Module calls are added incrementally, one per phase, rather than all
-# at once here — see infra/aws/modules/*/README.md (added as each
-# module lands) and the phase-by-phase commit history:
-#   Phase 45 -> module "networking"
+# at once here — see the phase-by-phase commit history:
+#   Phase 45 -> module "networking" (below)
 #   Phase 46 -> module "rds"
 #   Phase 47 -> module "redis"
 #   Phase 48 -> module "s3"
@@ -26,3 +25,10 @@ locals {
 #   Phase 50 -> load balancer resources (folded into "ecs" or its own "alb" module)
 #   Phase 51 -> module "secrets"
 #   Phase 52 -> module "observability"
+
+module "networking" {
+  source = "../../modules/networking"
+
+  name_prefix = local.name_prefix
+  tags        = local.common_tags
+}
