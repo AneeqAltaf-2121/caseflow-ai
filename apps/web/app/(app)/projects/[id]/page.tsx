@@ -19,11 +19,23 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
   const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
 
   const [members, setMembers] = useState<ProjectMember[] | null>(null);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<ProjectRole>("viewer");
   const [inviteError, setInviteError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+
+  // "Saved" fades on its own rather than lingering until the next edit —
+  // consistent with the transient, non-blocking confirmation pattern the
+  // rest of the app uses instead of native alert()s.
+  useEffect(() => {
+    if (!saved) return;
+    const timeout = setTimeout(() => setSaved(false), 2500);
+    return () => clearTimeout(timeout);
+  }, [saved]);
 
   const [costs, setCosts] = useState<CostSummary | null>(null);
 
@@ -60,9 +72,11 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
     e.preventDefault();
     setSaving(true);
     setSaveError(null);
+    setSaved(false);
     try {
       await api.updateProject(id, { name, description });
       await reload();
+      setSaved(true);
     } catch (err) {
       setSaveError(err instanceof ApiError ? err.message : "Failed to save.");
     } finally {
@@ -72,11 +86,12 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
 
   async function handleDelete() {
     if (!confirm(`Delete "${project?.name}"? This cannot be undone.`)) return;
+    setDeleteError(null);
     try {
       await api.deleteProject(id);
       router.replace("/projects");
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to delete project.");
+      setDeleteError(err instanceof ApiError ? err.message : "Failed to delete project.");
     }
   }
 
@@ -93,11 +108,12 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
   }
 
   async function handleRemove(userId: string) {
+    setRemoveError(null);
     try {
       await api.removeMember(id, userId);
       await loadMembers();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to remove member.");
+      setRemoveError(err instanceof ApiError ? err.message : "Failed to remove member.");
     }
   }
 
@@ -144,13 +160,20 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
         </label>
         {saveError && <p className="text-sm text-red-600 dark:text-red-400">{saveError}</p>}
         <div className="flex items-center justify-between">
-          <button
-            type="submit"
-            disabled={saving}
-            className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-          >
-            {saving ? "Saving…" : "Save changes"}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+            >
+              {saving ? "Saving…" : "Save changes"}
+            </button>
+            {saved && (
+              <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                Saved
+              </span>
+            )}
+          </div>
           <button
             type="button"
             onClick={handleDelete}
@@ -159,11 +182,13 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
             Delete project
           </button>
         </div>
+        {deleteError && <p className="text-sm text-red-600 dark:text-red-400">{deleteError}</p>}
       </form>
 
       <div className="flex flex-col gap-3 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
         <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Members</h2>
 
+        {removeError && <p className="text-sm text-red-600 dark:text-red-400">{removeError}</p>}
         {members === null && <Skeleton className="h-16 w-full" />}
         {members?.length === 0 && (
           <p className="text-sm text-zinc-500 dark:text-zinc-400">No members yet.</p>
