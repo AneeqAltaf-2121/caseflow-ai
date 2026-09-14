@@ -67,6 +67,22 @@ variable "worker_command" {
   default     = ["python", "-m", "app.worker"]
 }
 
+variable "migrate_command" {
+  description = "Command override that turns the shared api image into the one-shot migration task — the same alembic invocation docker-compose's migrate service runs."
+  type        = list(string)
+  default     = ["alembic", "upgrade", "head"]
+}
+
+variable "migrate_cpu" {
+  type    = number
+  default = 256
+}
+
+variable "migrate_memory" {
+  type    = number
+  default = 512
+}
+
 variable "api_secrets" {
   description = "Secrets Manager ARNs injected as environment variables into the api and worker containers (Phase 51) — {name, valueFrom} pairs, ECS's own `secrets` container-definition shape. Both share the same list since they share the same image."
   type = list(object({
