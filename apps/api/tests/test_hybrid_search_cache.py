@@ -120,6 +120,92 @@ async def test_different_query_is_not_a_cache_hit(db_session: AsyncSession) -> N
     assert counting_embedder.call_count == 2
 
 
+class _CountingChunkRepository(DocumentChunkRepository):
+    """Counts calls to the two chunk-rehydration paths — used to prove a
+    cache hit rehydrates with one batched query, not one query per
+    cached chunk (Phase 57 fixed an N+1 here after benchmarking found
+    the cached path slower than recomputing from scratch)."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session)
+        self.get_by_id_with_document_calls = 0
+        self.get_many_by_ids_with_document_calls = 0
+
+    async def get_by_id_with_document(self, chunk_id):
+        self.get_by_id_with_document_calls += 1
+        return await super().get_by_id_with_document(chunk_id)
+
+    async def get_many_by_ids_with_document(self, chunk_ids):
+        self.get_many_by_ids_with_document_calls += 1
+        return await super().get_many_by_ids_with_document(chunk_ids)
+
+
+async def test_cache_hit_rehydrates_with_one_batched_query_not_one_per_chunk(
+    db_session: AsyncSession,
+) -> None:
+    embedder = LocalEmbeddingProvider(dimensions=32)
+    owner = await UserRepository(db_session).create(email="rehydrate@x.com", display_name="R")
+    org = await OrganizationRepository(db_session).create(name="Co", slug="co-rehydrate")
+    project = await ProjectService(ProjectRepository(db_session)).create_project(
+        organization_id=org.id, name="Legal", description=None, created_by=owner.id
+    )
+    document_repository = DocumentRepository(db_session)
+    document = await document_repository.create(
+        project_id=project.id,
+        filename="contract.txt",
+        content_type="text/plain",
+        size_bytes=1,
+        checksum_sha256="x",
+        storage_key="contract.txt",
+        uploaded_by=owner.id,
+    )
+    await db_session.commit()
+    document = await document_repository.get_by_id(document.id)
+
+    texts = [
+        "This agreement terminates after 90 days notice.",
+        "Payment is due net 30.",
+        "Indemnification survives termination.",
+    ]
+    embeddings = await embedder.embed(texts)
+    counting_repository = _CountingChunkRepository(db_session)
+    await counting_repository.bulk_create(
+        [
+            DocumentChunk(
+                document_id=document.id,
+                document_version_id=document.versions[0].id,
+                page_number=1,
+                section=None,
+                text=text,
+                token_count=len(text.split()),
+                start_offset=i * 100,
+                end_offset=i * 100 + len(text),
+                embedding=embedding,
+                chunk_metadata={},
+            )
+            for i, (text, embedding) in enumerate(zip(texts, embeddings, strict=True))
+        ]
+    )
+    await db_session.commit()
+
+    cache = InMemoryCache()
+    service = HybridSearchService(
+        counting_repository, ProjectService(ProjectRepository(db_session)), embedder, cache
+    )
+
+    first = await service.hybrid_search(project_id=project.id, user_id=owner.id, query="agreement")
+    assert counting_repository.get_by_id_with_document_calls == 0
+    assert counting_repository.get_many_by_ids_with_document_calls == 0
+
+    second = await service.hybrid_search(project_id=project.id, user_id=owner.id, query="agreement")
+    assert [r.chunk.id for r in second] == [r.chunk.id for r in first]
+    assert len(second) > 1  # otherwise this test can't actually distinguish N calls from 1
+    # Exactly one batched call to rehydrate every cached chunk, and the
+    # old per-chunk path never called at all.
+    assert counting_repository.get_many_by_ids_with_document_calls == 1
+    assert counting_repository.get_by_id_with_document_calls == 0
+
+
 async def test_without_a_cache_every_call_recomputes(db_session: AsyncSession) -> None:
     embedder = LocalEmbeddingProvider(dimensions=32)
     owner, project = await _seed(db_session, embedder)
