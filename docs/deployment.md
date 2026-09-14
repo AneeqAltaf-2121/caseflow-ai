@@ -49,8 +49,8 @@ step-by-step a real deployment would follow, not a new design.
 Internet
    |
 Application Load Balancer (public subnets)
-   |-- /api/*  --> target group --> ECS Fargate: api service
-   |-- /       --> target group --> ECS Fargate: web service
+   |-- /health, /ready, /auth/*, /projects/* --> target group --> ECS Fargate: api service
+   |-- /                        (default)    --> target group --> ECS Fargate: web service
 ECS Fargate: worker service (no ALB target)
 ECS Task (one-shot): migrate — run explicitly, not a long-running service
    |

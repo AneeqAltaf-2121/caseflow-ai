@@ -50,3 +50,16 @@ def test_doc_mentions_subscribing_the_alerts_topic_from_observability_module() -
     content = _deployment_md()
     assert "sns subscribe" in content
     assert "alerts_topic_arn" in content
+
+
+def test_alb_routing_diagram_matches_the_apis_real_route_prefixes_not_slash_api() -> None:
+    # Phase 59: the original diagram said "/api/*", which matches nothing
+    # — apps/api's routes carry no "/api" prefix (app/api/router.py's
+    # APIRouter() takes none). Locks the doc to the corrected prefixes so
+    # it can't silently drift from infra/aws/modules/alb/main.tf again.
+    content = _deployment_md()
+    assert "/api/*" not in content
+    assert "/health, /ready, /auth/*, /projects/*" in content
+
+    alb_main_tf = (REPO_ROOT / "infra" / "aws" / "modules" / "alb" / "main.tf").read_text()
+    assert 'values = ["/health", "/ready", "/auth/*", "/projects/*"]' in alb_main_tf

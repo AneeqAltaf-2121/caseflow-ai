@@ -4,9 +4,9 @@
 
 **CaseFlow AI** is a full-stack AI research and document intelligence platform for organizing document collections, performing semantic and hybrid search, generating citation-grounded answers and reports, and evaluating AI system quality across models, prompts, and retrieval strategies.
 
-The project is being built as a production-oriented AI platform rather than a standalone "chat with documents" demo. Its architecture is designed around multi-user workspaces, asynchronous document processing, retrieval-augmented generation (RAG), AI evaluation, observability, and reproducible model experimentation.
+The project is built as a production-oriented AI platform rather than a standalone "chat with documents" demo. Its architecture is organized around multi-user workspaces, asynchronous document processing, retrieval-augmented generation (RAG), AI evaluation, observability, and reproducible model experimentation.
 
-> **Status:** Active development. The backend foundation and persistence layers are implemented, with authentication and authorization currently under development.
+> **Status:** Feature-complete. Every layer described below — auth, document ingestion, hybrid RAG, evaluation, human review, observability, the frontend, Docker, CI, and AWS infrastructure-as-code — is implemented and tested. See [Current Development Status](#current-development-status) for the phase-by-phase history and [Roadmap](#roadmap) for what's left before v1.0.0.
 
 ---
 
@@ -76,9 +76,9 @@ CaseFlow AI is designed to provide the infrastructure required to build, inspect
 - Cost and latency tracking
 - Human review workflows
 - Dockerized local development
-- Automated testing
-- CI/CD
-- AWS deployment
+- Automated testing (backend, frontend, Docker, Terraform, end-to-end)
+- CI/CD (GitHub Actions)
+- AWS infrastructure as code (Terraform — validated, no live deployment; see `infra/aws/README.md` and `docs/deployment.md`)
 
 ---
 
@@ -89,21 +89,24 @@ CaseFlow AI is organized as a monorepo:
 ```text
 caseflow-ai/
 ├── apps/
-│   ├── api/              # FastAPI backend
-│   └── web/              # Next.js / React / TypeScript frontend
+│   ├── api/              # FastAPI backend (+ Dockerfile — shared by api/worker/migrate)
+│   └── web/              # Next.js / React / TypeScript frontend (+ Dockerfile)
 │
 ├── packages/
-│   ├── evals/            # AI evaluation framework
+│   ├── evals/            # AI evaluation framework (installable standalone)
 │   └── shared/           # Shared schemas and utilities
 │
 ├── infra/
-│   ├── aws/              # AWS infrastructure
-│   └── docker/           # Container configuration
+│   └── aws/              # Terraform IaC — modules/ + environments/dev (validated, not deployed)
 │
 ├── docs/
-│   └── decisions/        # Architecture Decision Records (ADRs)
+│   ├── decisions/        # Architecture Decision Records (ADRs)
+│   ├── architecture.md
+│   ├── domain-model.md
+│   ├── deployment.md
+│   └── benchmarks.md
 │
-├── scripts/              # Development and operational scripts
+├── scripts/               # Development and operational scripts (demo seeding, benchmarking)
 │
 ├── .github/
 │   └── workflows/        # CI/CD workflows
@@ -208,76 +211,27 @@ The target application flow is:
 
 ## Current Development Status
 
-CaseFlow AI is being developed incrementally so that each layer is tested before higher-level AI functionality is introduced.
+CaseFlow AI was built incrementally, each layer tested before the next was introduced — 58 phases, each landing as its own commit with passing tests, lint, and typecheck before moving on. All of the following is implemented and tested, not planned:
 
-### Completed
+**Foundation** — monorepo structure, FastAPI application skeleton, structured logging, error handling, health/readiness endpoints, PostgreSQL + SQLAlchemy + Alembic, repository/service layering, domain model and ADRs.
 
-**Phase 0 — Repository & Engineering Foundation**
+**Authentication & authorization** — OAuth login (Google, plus a mock provider for local dev/tests), JWT sessions, project membership, owner/editor/viewer roles enforced server-side.
 
-- Monorepo structure
-- Git/GitHub workflow
-- Local development environment
-- Environment variable template
-- Initial documentation structure
+**Document intelligence** — Next.js frontend, S3-compatible object storage, Redis-backed async jobs (Dramatiq), document ingestion and chunking, embeddings, semantic vector search (pgvector), hybrid retrieval (vector + BM25 via reciprocal rank fusion), reranking.
 
-**Phase 1 — Architecture & Domain Model**
+**Grounded AI** — citation-grounded RAG chat, persistent conversations, insufficient-evidence handling, citation-grounded report generation.
 
-- System architecture documentation
-- Core domain model
-- Architecture Decision Records
+**AI evaluation** — prompt/model version tracking, reproducible evaluation datasets, retrieval metrics (Recall@K, Precision@K, MRR, NDCG), deterministic answer checks, LLM-as-a-judge graders (faithfulness, relevance, completeness, citation support), model comparison, a RAG regression suite with hard quality thresholds.
 
-**Phase 2 — FastAPI Foundation**
+**Production engineering** — cost/latency tracking, Redis caching, retry and failure handling, structured observability, audit logging, human review workflows, rate limiting and security hardening, Dockerized local development, GitHub Actions CI (backend, frontend, Docker, Terraform, end-to-end), integration and end-to-end tests.
 
-- Application configuration
-- Structured backend organization
-- Logging foundation
-- Error handling
-- Health endpoint
-- Readiness endpoint
-- Backend testing infrastructure
+**Infrastructure as code** — Terraform for the full target AWS architecture (networking, RDS, ElastiCache, S3, IAM, ECS/Fargate, ALB, Secrets Manager, CloudWatch alarms) — validated (`fmt`/`validate` in CI) but never deployed; see [Security](#security) and `docs/deployment.md`.
 
-**Phase 3 — PostgreSQL Persistence**
+**Polish & tooling** — frontend UX polish, a demo dataset seeder (`scripts/seed_demo.py`), a performance benchmarking harness (`scripts/benchmark.py`), and this documentation pass.
 
-- PostgreSQL integration
-- SQLAlchemy persistence layer
-- Alembic migrations
-- Repository/service boundaries
-- Persistence tests
+### Remaining before v1.0.0
 
-### In Progress
-
-**Phase 4 — Authentication & Authorization**
-
-- User authentication
-- OAuth integration
-- Project membership
-- Role-based access control
-- Resource-level authorization
-
-### Upcoming
-
-Later phases will introduce:
-
-1. Next.js application shell
-2. Document upload and object storage
-3. Redis-backed asynchronous jobs
-4. Document ingestion and chunking
-5. Embeddings and vector search
-6. Hybrid retrieval and reranking
-7. Citation-grounded RAG
-8. Persistent conversations
-9. Report generation
-10. Prompt and model version tracking
-11. AI evaluation framework
-12. LLM-as-a-judge graders
-13. Evaluation dashboards
-14. Model comparison
-15. Cost and latency instrumentation
-16. Observability and reliability
-17. Human review workflows
-18. Docker and CI/CD
-19. AWS deployment
-20. Security hardening
+- Final portfolio release: a full test-suite run across both Python packages and the frontend, a `v1.0.0` git tag, and a GitHub release.
 
 ---
 
@@ -312,40 +266,60 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
 
 ### Install backend dependencies
 
+Install `packages/evals` first — `apps/api` imports `caseflow_evals` at
+import time (see `apps/api/app/evals/`):
+
 ```bash
-pip install -e "apps/api[dev]"
 pip install -e "packages/evals[dev]"
+pip install -e "apps/api[dev]"
 ```
 
-`packages/evals` is CaseFlow's evaluation framework (dataset format now;
-graders and evaluation-run orchestration in later phases) — a separate
-installable package, usable independently of the FastAPI app, that
-`apps/api` depends on at import time (see `apps/api/app/evals/`).
+`packages/evals` is CaseFlow's evaluation framework — dataset format,
+retrieval metrics, and graders — a separate installable package, usable
+standalone (a notebook, a CI script) without pulling in the whole
+FastAPI app.
 
 ### Run the test suite
 
-From `apps/api`:
-
 ```bash
-pytest
+cd apps/api && pytest
+cd packages/evals && pytest
 ```
 
-Current backend status:
-
-```text
-12 tests passing
-```
+Both are wired into CI (`.github/workflows/ci.yml`'s `backend` job) —
+see the CI badge at the top of this file for current status rather than
+a test count here, which would go stale the moment either suite grows.
 
 ### Lint
 
 ```bash
 ruff check .
+ruff format --check .
 ```
 
 ### Type check
 
 ```bash
 mypy app
+```
+
+---
+
+## Frontend Development
+
+The frontend lives in `apps/web` (Next.js / React / TypeScript). It talks
+to the backend over the HTTP API only — set `NEXT_PUBLIC_API_URL` (see
+`apps/web/.env.example`) to point it at a running `apps/api` (either
+`uvicorn app.main:app` directly or the Docker stack below).
+
+```bash
+cd apps/web
+npm install
+npm run dev            # http://localhost:3000
+npm run lint            # ESLint
+npx tsc --noEmit         # TypeScript
+npm run build            # production build
+npm run test:e2e         # Playwright — needs a running api + web (see e2e/README.md)
 ```
 
 ---
@@ -441,7 +415,8 @@ CaseFlow AI follows several design principles throughout development:
 
 ## Testing Strategy
 
-The project will use multiple testing layers as development progresses:
+Every layer below is implemented and runs in CI on every push/PR (see
+`.github/workflows/ci.yml` and the CI badge above):
 
 ```text
 Unit Tests
@@ -450,89 +425,98 @@ Repository / Service Tests
     ↓
 API Integration Tests
     ↓
-RAG & Retrieval Evaluation
+RAG & Retrieval Evaluation (packages/evals + a hard-threshold regression suite)
     ↓
-Frontend Component Tests
+Docker Build Validation
     ↓
-End-to-End Tests
+Terraform Validation (fmt/validate)
+    ↓
+End-to-End Tests (Playwright, over a real Docker Compose stack)
 ```
 
-The AI evaluation layer will additionally measure retrieval and generation behavior using reproducible datasets and versioned graders.
+The AI evaluation layer additionally measures retrieval and generation
+behavior using reproducible, versioned datasets and graders — see
+`packages/evals` and `apps/api/app/evals/`.
 
 ---
 
 ## AI Evaluation Strategy
 
-CaseFlow AI is designed to evaluate AI quality as a first-class feature rather than treating model output as inherently correct.
+CaseFlow AI treats AI quality as a first-class, measured concern rather than assuming model output is correct.
 
-Planned evaluation dimensions include:
+Evaluation dimensions implemented and covered by
+`apps/api/tests/test_rag_regression.py`'s regression thresholds and
+`apps/api/app/evals/`:
 
-- retrieval Recall@K;
-- retrieval Precision@K;
-- mean reciprocal rank;
-- answer faithfulness;
-- answer completeness;
-- answer relevance;
-- citation correctness;
-- hallucination rate;
-- latency;
-- token usage;
-- estimated model cost.
+- retrieval Recall@K, Precision@K, mean reciprocal rank, NDCG@K;
+- answer faithfulness, completeness, relevance (LLM-as-a-judge);
+- citation correctness (deterministic — every citation is checked
+  against the project's real chunks, not just judged);
+- latency, token usage, and estimated model cost (recorded on every
+  `ModelRun`).
 
-LLM-as-a-judge graders will be combined with deterministic validation where possible, and judge model/prompt versions will be recorded to make evaluation runs reproducible.
+LLM-as-a-judge graders are combined with deterministic validation where
+possible (see `app/evals/deterministic_checks.py` vs.
+`app/evals/graders.py`), and every judge call records its model, prompt
+version, and temperature so evaluation runs stay reproducible.
 
 ---
 
 ## Security
 
-The project is designed with production security requirements in mind, including:
+Implemented, not merely designed for:
 
-- OAuth-based authentication
-- backend-enforced project authorization
-- environment-based secret management
-- secure file upload validation
+- OAuth-based authentication (Google, plus a mock provider gated to
+  non-production environments — see `docs/decisions/004-authentication.md`)
+- backend-enforced, resource-level project authorization (owner/editor/viewer)
+- environment-based secret management — no literal secret ever committed;
+  the AWS Terraform's `secrets` module goes further, generating what it
+  can itself and leaving externally-issued credentials as empty Secrets
+  Manager containers populated out-of-band (`docs/decisions/009-security-hardening.md`)
+- secure file upload validation (size/type limits, content sniffing)
 - rate limiting
 - resource isolation between projects
-- audit logging
-- secure object-storage access
+- audit logging of authorization-sensitive actions
+- secure object-storage access (signed URLs in the S3 backend)
 - prompt-injection boundaries for retrieved documents
 
-Uploaded documents will be treated as untrusted data and never as privileged system instructions.
+Uploaded documents are treated as untrusted data passed to the LLM as
+context, never as privileged system instructions.
 
 ---
 
 ## Roadmap
 
-The long-term goal is to make CaseFlow AI a complete platform for both **document intelligence** and **AI system evaluation**.
-
-The key development milestones are:
+CaseFlow AI's long-term goal — a complete platform for both **document intelligence** and **AI system evaluation** — is implemented end to end:
 
 ```text
-Multi-user projects
+Multi-user projects                    ✅
         ↓
-Asynchronous document ingestion
+Asynchronous document ingestion        ✅
         ↓
-Semantic + hybrid retrieval
+Semantic + hybrid retrieval            ✅
         ↓
-Citation-grounded RAG
+Citation-grounded RAG                  ✅
         ↓
-Prompt/model tracking
+Prompt/model tracking                  ✅
         ↓
-Automated AI evaluation
+Automated AI evaluation                ✅
         ↓
-Model comparison
+Model comparison                       ✅
         ↓
-Human review
+Human review                           ✅
         ↓
-Production observability
+Production observability               ✅
         ↓
-AWS deployment
+AWS infrastructure as code             ✅ (validated, not deployed)
+        ↓
+v1.0.0 release                         ← next
 ```
 
 ---
 
 ## Project Status
 
-🚧 **CaseFlow AI is currently under active development.**
+✅ **CaseFlow AI is feature-complete and preparing for its v1.0.0 release.**
 
-The current focus is authentication and authorization. RAG, evaluation, frontend, and deployment capabilities described above are part of the planned architecture and will be added incrementally as their corresponding phases are completed.
+Every capability described above — auth, document intelligence, grounded RAG, AI evaluation, human review, observability, the frontend, Docker, CI, and AWS infrastructure-as-code — is implemented, tested, and merged. What remains is the final release phase: one more full test-suite run, a `v1.0.0` git tag, and a GitHub release.

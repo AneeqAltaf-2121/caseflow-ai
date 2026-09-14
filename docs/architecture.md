@@ -85,6 +85,34 @@ version, model, tokens, latency, cost) to support offline evaluation,
 regression comparisons across prompt/model/retriever versions, and cost
 dashboards. See `packages/evals`.
 
+### AWS deployment (infrastructure as code)
+`infra/aws/` is validated Terraform for the target production
+architecture — ALB → three ECS Fargate services (api, worker, web,
+sharing one image for api/worker) → RDS PostgreSQL+pgvector,
+ElastiCache Redis, S3, Secrets Manager, CloudWatch — never deployed
+against a real AWS account in this project's scope. See
+`docs/decisions/010-aws-architecture.md` for the design and
+`docs/deployment.md` for what actually running it would involve.
+
+## System flow (Mermaid)
+
+```mermaid
+flowchart TD
+    Browser["Browser"] --> Web["Next.js frontend"]
+    Web -->|HTTP API| Api["FastAPI backend"]
+    Api --> PG[("PostgreSQL + pgvector")]
+    Api --> Redis[("Redis — jobs + cache")]
+    Api --> Storage[("Object storage — S3 / local")]
+    Redis --> Worker["Background worker (Dramatiq)"]
+    Worker --> Ingest["Extract → Chunk → Embed"]
+    Ingest --> PG
+    Api --> Retrieval["Hybrid retrieval + reranking"]
+    Retrieval --> PG
+    Retrieval --> Gen["LLM generation"]
+    Gen --> Citations["Grounded answer + citations"]
+    Citations --> Eval["Evaluation / observability"]
+```
+
 ## Cross-cutting principles
 
 - **Authorization is enforced server-side, always**, scoped to
@@ -104,15 +132,14 @@ dashboards. See `packages/evals`.
 ```
 caseflow-ai/
 ├── apps/
-│   ├── web/       Next.js frontend
-│   └── api/       FastAPI backend
+│   ├── web/       Next.js frontend (own Dockerfile)
+│   └── api/       FastAPI backend (own Dockerfile — shared by api/worker/migrate)
 ├── packages/
 │   ├── shared/    Shared schemas/types
 │   └── evals/     Evaluation datasets, graders, runner
 ├── infra/
-│   ├── docker/    Dockerfiles
-│   └── aws/       Deployment infrastructure
-├── docs/          Architecture, domain model, ADRs
-├── scripts/       Dev/ops scripts
+│   └── aws/       Terraform IaC (modules/ + environments/dev) — validated, not deployed
+├── docs/          Architecture, domain model, ADRs, deployment, benchmarks
+├── scripts/       Dev/ops scripts (demo seeding, benchmarking)
 └── docker-compose.yml
 ```

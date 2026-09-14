@@ -1,11 +1,18 @@
 # Phase 50: internet-facing ALB in front of the api and web ECS
-# services. Path-based routing sends /api/* to the api target group
-# and everything else to web — the same split a custom domain's
-# reverse proxy would make, just expressed as one ALB rule instead of
-# two DNS names, since no domain/ACM certificate exists in this
-# IaC-only scope. HTTPS would be the next thing added once a real
-# domain is available (ACM cert + a redirect from an HTTP listener);
-# until then this is deliberately HTTP-only on port 80.
+# services. Path-based routing sends the api's actual top-level route
+# prefixes to the api target group and everything else to web — the
+# same split a custom domain's reverse proxy would make, just expressed
+# as one ALB rule instead of two DNS names, since no domain/ACM
+# certificate exists in this IaC-only scope. HTTPS would be the next
+# thing added once a real domain is available (ACM cert + a redirect
+# from an HTTP listener); until then this is deliberately HTTP-only on
+# port 80.
+#
+# (Phase 59 correction: this originally routed a single "/api/*"
+# pattern, which doesn't match anything — apps/api's routes have no
+# "/api" prefix at all (see app/api/router.py: `api_router =
+# APIRouter()`, no prefix argument). The api's real top-level paths are
+# /health, /ready, /auth/*, and /projects/* — listed explicitly below.)
 
 resource "aws_lb" "this" {
   name               = "${var.name_prefix}-alb"
@@ -88,7 +95,7 @@ resource "aws_lb_listener_rule" "api" {
 
   condition {
     path_pattern {
-      values = ["/api/*"]
+      values = ["/health", "/ready", "/auth/*", "/projects/*"]
     }
   }
 }
