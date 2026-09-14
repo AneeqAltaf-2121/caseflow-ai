@@ -25,3 +25,7 @@ output "db_master_user_secret_arn" {
 output "redis_endpoint" {
   value = module.redis.primary_endpoint_address
 }
+
+output "documents_bucket_name" {
+  value = module.s3.bucket_name
+}
