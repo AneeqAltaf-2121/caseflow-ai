@@ -24,7 +24,7 @@ locals {
 #   Phase 49 -> module "ecs" (+ module "iam" for task roles)
 #   Phase 50 -> module "alb" (ecs services attach to its target groups)
 #   Phase 51 -> module "secrets" (ecs's api/worker containers inject its ARNs)
-#   Phase 52 -> module "observability"
+#   Phase 52 -> module "observability" (alarms on top of ecs/alb/rds)
 
 module "networking" {
   source = "../../modules/networking"
@@ -101,4 +101,18 @@ module "ecs" {
     { name = "OPENAI_API_KEY", valueFrom = module.secrets.openai_api_key_arn },
     { name = "JWT_SECRET_KEY", valueFrom = module.secrets.jwt_secret_key_arn },
   ]
+}
+
+module "observability" {
+  source = "../../modules/observability"
+
+  name_prefix                 = local.name_prefix
+  alb_arn_suffix              = module.alb.alb_arn_suffix
+  api_target_group_arn_suffix = module.alb.api_target_group_arn_suffix
+  ecs_cluster_name            = module.ecs.cluster_name
+  api_service_name            = module.ecs.api_service_name
+  worker_service_name         = module.ecs.worker_service_name
+  worker_log_group_name       = module.ecs.worker_log_group_name
+  db_instance_id              = module.rds.db_instance_id
+  tags                        = local.common_tags
 }
