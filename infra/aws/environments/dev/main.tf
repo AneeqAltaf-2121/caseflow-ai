@@ -50,3 +50,10 @@ module "redis" {
   security_group_id  = module.networking.redis_security_group_id
   tags               = local.common_tags
 }
+
+module "s3" {
+  source = "../../modules/s3"
+
+  name_prefix = local.name_prefix
+  tags        = local.common_tags
+}
