@@ -108,16 +108,23 @@ class HybridSearchService:
         return fused
 
     async def _rehydrate(self, serialized: list[dict]) -> list[FusedResult] | None:
-        """Re-fetches each cached chunk id from the DB (a cache should
-        never hand a caller a detached/stale ORM object) and rebuilds
-        FusedResult in the cached order. Returns None — a cache miss in
-        all but name — if any cached chunk no longer exists, since a
-        partial result set would silently under-represent the project."""
+        """Re-fetches every cached chunk id from the DB in one query (a
+        cache should never hand a caller a detached/stale ORM object) and
+        rebuilds FusedResult in the cached order. Returns None — a cache
+        miss in all but name — if any cached chunk no longer exists,
+        since a partial result set would silently under-represent the
+        project.
+
+        One batched query rather than one per cached chunk (fixed in
+        Phase 57 after scripts/benchmark.py measured the N+1 version as
+        *slower* than recomputing the search from scratch — a cache
+        whose hit path costs more than its miss path defeats the point)."""
+        chunk_ids = [uuid.UUID(entry["chunk_id"]) for entry in serialized]
+        chunks_by_id = await self._chunk_repository.get_many_by_ids_with_document(chunk_ids)
+
         results: list[FusedResult] = []
         for entry in serialized:
-            chunk = await self._chunk_repository.get_by_id_with_document(
-                uuid.UUID(entry["chunk_id"])
-            )
+            chunk = chunks_by_id.get(uuid.UUID(entry["chunk_id"]))
             if chunk is None:
                 return None
             results.append(

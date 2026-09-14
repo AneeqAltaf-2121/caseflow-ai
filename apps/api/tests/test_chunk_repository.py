@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -145,6 +147,45 @@ async def test_search_by_embedding_orders_by_similarity_and_scopes_to_project(
     assert [chunk.text for chunk, _score in results] == ["close match", "far match"]
     assert results[0][1] == pytest.approx(1.0)
     assert results[1][1] == pytest.approx(0.0)
+
+
+async def test_get_many_by_ids_with_document_returns_a_dict_keyed_by_id(
+    db_session: AsyncSession,
+) -> None:
+    document = await _seed_document(db_session)
+    repository = DocumentChunkRepository(db_session)
+    first, second = await repository.bulk_create(
+        [_chunk(document, text="first chunk"), _chunk(document, page_number=2, text="second chunk")]
+    )
+    await db_session.commit()
+
+    found = await repository.get_many_by_ids_with_document([first.id, second.id])
+
+    assert set(found) == {first.id, second.id}
+    assert found[first.id].text == "first chunk"
+    # `.document` is eager-loaded, same as get_by_id_with_document, so a
+    # caller building HybridSearchResultRead never triggers a lazy load.
+    assert found[first.id].document.filename == "notes.txt"
+
+
+async def test_get_many_by_ids_with_document_silently_omits_ids_that_do_not_exist(
+    db_session: AsyncSession,
+) -> None:
+    document = await _seed_document(db_session)
+    repository = DocumentChunkRepository(db_session)
+    [real_chunk] = await repository.bulk_create([_chunk(document)])
+    await db_session.commit()
+
+    found = await repository.get_many_by_ids_with_document([real_chunk.id, uuid.uuid4()])
+
+    assert set(found) == {real_chunk.id}
+
+
+async def test_get_many_by_ids_with_document_returns_empty_dict_for_empty_input(
+    db_session: AsyncSession,
+) -> None:
+    repository = DocumentChunkRepository(db_session)
+    assert await repository.get_many_by_ids_with_document([]) == {}
 
 
 async def test_embedding_round_trips_as_a_float_list(db_session: AsyncSession) -> None:

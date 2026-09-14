@@ -35,6 +35,26 @@ class DocumentChunkRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_many_by_ids_with_document(
+        self, chunk_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, DocumentChunk]:
+        """Like get_by_id_with_document, batched — one query for N ids
+        instead of N queries. Used by HybridSearchService's cache
+        rehydration (Phase 33/57): a cache hit rebuilding ~20 fused
+        results used to issue 20 sequential queries, which measured out
+        slower than recomputing the search from scratch (see
+        scripts/benchmark.py). Returns a dict rather than a list since
+        callers need to re-associate each chunk with its cached
+        rank/score by id, in the cached order — not DB return order."""
+        if not chunk_ids:
+            return {}
+        result = await self._session.execute(
+            select(DocumentChunk)
+            .where(DocumentChunk.id.in_(chunk_ids))
+            .options(selectinload(DocumentChunk.document))
+        )
+        return {chunk.id: chunk for chunk in result.scalars().all()}
+
     async def list_for_document(self, document_id: uuid.UUID) -> list[DocumentChunk]:
         result = await self._session.execute(
             select(DocumentChunk)
