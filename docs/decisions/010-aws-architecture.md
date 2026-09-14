@@ -29,8 +29,8 @@ Internet
    |
    v
 Application Load Balancer (public subnets)
-   |-- /api/*, /auth/*, /projects/*, ... --> target group --> ECS Fargate: api service
-   |-- /               (default)        --> target group --> ECS Fargate: web service
+   |-- /health, /ready, /auth/*, /projects/* --> target group --> ECS Fargate: api service
+   |-- /                        (default)    --> target group --> ECS Fargate: web service
    |
 ECS Fargate: worker service (no ALB target — consumes jobs, doesn't serve HTTP)
    |
@@ -118,3 +118,11 @@ ECS Fargate: worker service (no ALB target — consumes jobs, doesn't serve HTTP
   can validate, never `terraform apply` against a real account. See
   Phase 53's ADR for how that's verified in CI, and docs/deployment.md
   (Phase 54) for what actually deploying this would involve.
+- **Phase 59 correction:** Phase 50's first implementation routed a
+  single `/api/*` pattern to the api target group — which never
+  matches anything, since `apps/api`'s routes carry no `/api` prefix
+  at all (`app/api/router.py`'s `api_router = APIRouter()` takes none).
+  Fixed to list the api's actual top-level paths explicitly
+  (`/health`, `/ready`, `/auth/*`, `/projects/*`), which is what this
+  ADR's own diagram said from the start — the Terraform had drifted
+  from its own design doc without either being updated to match.

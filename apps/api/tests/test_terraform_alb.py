@@ -43,13 +43,17 @@ def test_web_target_group_health_check_uses_root_path() -> None:
     assert 'path                = "/"' in block
 
 
-def test_listener_forwards_to_web_by_default_and_api_under_slash_api() -> None:
+def test_listener_forwards_to_web_by_default_and_api_by_its_real_route_prefixes() -> None:
     content = _main_tf()
     assert 'resource "aws_lb_listener" "http"' in content
     assert "target_group_arn = aws_lb_target_group.web.arn" in content
     assert 'resource "aws_lb_listener_rule" "api"' in content
     assert "target_group_arn = aws_lb_target_group.api.arn" in content
-    assert 'values = ["/api/*"]' in content
+    # apps/api's routes have no "/api" prefix at all (app/api/router.py's
+    # APIRouter() takes none) — a bare "/api/*" pattern here would never
+    # match anything (Phase 59 found and fixed this). The real top-level
+    # paths are /health, /ready, /auth/*, /projects/*.
+    assert 'values = ["/health", "/ready", "/auth/*", "/projects/*"]' in content
 
 
 def test_alb_module_is_wired_into_the_dev_environment() -> None:
