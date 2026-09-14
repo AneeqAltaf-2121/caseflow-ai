@@ -7,11 +7,13 @@ upgrade/downgrade ordering, typos, missing imports) cheaply and without
 requiring a live database.
 """
 
+import re
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
 
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect
 
 from alembic import command
@@ -77,3 +79,35 @@ def test_downgrade_to_base_drops_all_tables(tmp_path: Path) -> None:
     sync_engine.dispose()
 
     assert tables == set()
+
+
+def test_every_revision_id_fits_the_configured_version_table_column_length() -> None:
+    """SQLite never enforces VARCHAR length at all, so the two tests
+    above running the full chain against SQLite prove nothing about
+    this: alembic_version.version_num defaults to VARCHAR(32), and this
+    project's revision ids are descriptive slugs, not short hashes
+    ("0003_add_document_chunks_pgvector" alone is 34 characters) — a
+    real, strict-typed Postgres raises
+    asyncpg.exceptions.StringDataRightTruncationError the moment a
+    revision id longer than the column allows is written, which only
+    ever showed up against a truly fresh Postgres database (this
+    project's first real CI run, not this sandbox's SQLite-only local
+    testing). alembic/env.py sets version_table_column_length=255 to
+    fix it; this test guards both that alembic/env.py still sets it,
+    and that no revision id ever grows past whatever it's set to.
+    """
+    env_py = (API_ROOT / "alembic" / "env.py").read_text(encoding="utf-8")
+    match = re.search(r"VERSION_TABLE_COLUMN_LENGTH\s*=\s*(\d+)", env_py)
+    assert match, "alembic/env.py must define VERSION_TABLE_COLUMN_LENGTH"
+    configured_length = int(match.group(1))
+
+    assert "version_table_column_length=VERSION_TABLE_COLUMN_LENGTH" in env_py
+
+    script_directory = ScriptDirectory(str(API_ROOT / "alembic"))
+    revision_ids = [script.revision for script in script_directory.walk_revisions()]
+    assert revision_ids  # sanity: the migration chain isn't empty
+
+    too_long = [r for r in revision_ids if len(r) > configured_length]
+    assert too_long == [], (
+        f"revision id(s) exceed VERSION_TABLE_COLUMN_LENGTH={configured_length}: {too_long}"
+    )

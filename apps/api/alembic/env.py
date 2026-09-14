@@ -19,6 +19,17 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
+# Alembic's default alembic_version.version_num column is VARCHAR(32).
+# This project's revision ids are descriptive slugs, not short hashes —
+# "0003_add_document_chunks_pgvector" alone is 34 characters — so the
+# default silently truncates-and-errors on a fresh Postgres database
+# the moment a migration with a long-enough id is applied
+# (asyncpg.exceptions.StringDataRightTruncationError). SQLite never
+# caught this locally since it doesn't enforce VARCHAR length at all;
+# a truly fresh Postgres (a clean CI run, `docker compose up` against
+# a brand-new volume) does. 255 leaves headroom for future revisions.
+VERSION_TABLE_COLUMN_LENGTH = 255
+
 
 def get_url() -> str:
     """Resolve the DB URL: -x sqlalchemy_url=... override, else app settings.
@@ -38,13 +49,18 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        version_table_column_length=VERSION_TABLE_COLUMN_LENGTH,
     )
     with context.begin_transaction():
         context.run_migrations()
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        version_table_column_length=VERSION_TABLE_COLUMN_LENGTH,
+    )
     with context.begin_transaction():
         context.run_migrations()
 
