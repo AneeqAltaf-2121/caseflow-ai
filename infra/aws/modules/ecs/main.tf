@@ -35,6 +35,12 @@ resource "aws_cloudwatch_log_group" "web" {
   tags              = var.tags
 }
 
+resource "aws_cloudwatch_log_group" "migrate" {
+  name              = "/ecs/${var.name_prefix}/migrate"
+  retention_in_days = var.log_retention_days
+  tags              = var.tags
+}
+
 # --- api ------------------------------------------------------------------
 
 resource "aws_ecs_task_definition" "api" {
@@ -196,6 +202,45 @@ resource "aws_ecs_service" "web" {
       container_port   = var.web_port
     }
   }
+
+  tags = var.tags
+}
+
+# --- migrate (one-shot task, no service) --------------------------------
+# ADR 010 keeps this conceptually a Task, not a Service, mirroring
+# docker-compose's `migrate` running to completion once before api/worker
+# start (Phase 39) rather than a long-running process. Nothing here
+# runs it automatically — a real deployment invokes it explicitly via
+# `aws ecs run-task` (pinned to a single count, FARGATE, this task
+# definition) as one step of its deploy pipeline, before updating the
+# api/worker services to the new image. See docs/deployment.md.
+
+resource "aws_ecs_task_definition" "migrate" {
+  family                   = "${var.name_prefix}-migrate"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = var.migrate_cpu
+  memory                   = var.migrate_memory
+  execution_role_arn       = var.task_execution_role_arn
+  task_role_arn            = var.task_role_arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "migrate"
+      image     = var.api_image
+      essential = true
+      command   = var.migrate_command
+      secrets   = var.api_secrets
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.migrate.name
+          awslogs-region        = data.aws_region.current.name
+          awslogs-stream-prefix = "migrate"
+        }
+      }
+    }
+  ])
 
   tags = var.tags
 }

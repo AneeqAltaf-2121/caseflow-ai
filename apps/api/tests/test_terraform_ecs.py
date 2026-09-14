@@ -57,6 +57,15 @@ def test_web_uses_its_own_image_not_the_shared_api_image() -> None:
     assert "var.api_image" not in web_block
 
 
+def test_migrate_is_a_one_shot_task_definition_with_no_service() -> None:
+    content = _main_tf()
+    assert 'resource "aws_ecs_task_definition" "migrate"' in content
+    assert 'resource "aws_ecs_service" "migrate"' not in content
+    migrate_block = content.split('resource "aws_ecs_task_definition" "migrate"')[1]
+    assert "var.api_image" in migrate_block
+    assert "command   = var.migrate_command" in migrate_block
+
+
 def test_task_definitions_reference_the_iam_module_roles() -> None:
     content = _main_tf()
     assert "execution_role_arn       = var.task_execution_role_arn" in content
@@ -65,14 +74,16 @@ def test_task_definitions_reference_the_iam_module_roles() -> None:
 
 def test_every_task_definition_ships_logs_to_its_own_log_group() -> None:
     content = _main_tf()
-    for service in ("api", "worker", "web"):
+    for service in ("api", "worker", "web", "migrate"):
         assert f'resource "aws_cloudwatch_log_group" "{service}"' in content
         assert f"aws_cloudwatch_log_group.{service}.name" in content
 
 
 def test_tasks_run_on_fargate_in_private_subnets_with_no_public_ip() -> None:
     content = _main_tf()
-    assert content.count('requires_compatibilities = ["FARGATE"]') == 3
+    # 4 task definitions (api, worker, web, migrate) but only 3 services
+    # (migrate is a one-shot task with no long-running service).
+    assert content.count('requires_compatibilities = ["FARGATE"]') == 4
     assert len(re.findall(r'launch_type\s+=\s+"FARGATE"', content)) == 3
     assert content.count("assign_public_ip = false") == 3
     assert len(re.findall(r"subnets\s+=\s+var\.private_subnet_ids", content)) == 3

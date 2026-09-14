@@ -34,6 +34,10 @@ output "ecs_cluster_name" {
   value = module.ecs.cluster_name
 }
 
+output "migrate_task_definition_arn" {
+  value = module.ecs.migrate_task_definition_arn
+}
+
 output "alb_dns_name" {
   value = module.alb.alb_dns_name
 }
