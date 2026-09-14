@@ -21,3 +21,7 @@ output "db_endpoint" {
 output "db_master_user_secret_arn" {
   value = module.rds.master_user_secret_arn
 }
+
+output "redis_endpoint" {
+  value = module.redis.primary_endpoint_address
+}

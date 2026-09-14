@@ -41,3 +41,12 @@ module "rds" {
   security_group_id  = module.networking.rds_security_group_id
   tags               = local.common_tags
 }
+
+module "redis" {
+  source = "../../modules/redis"
+
+  name_prefix        = local.name_prefix
+  private_subnet_ids = module.networking.private_subnet_ids
+  security_group_id  = module.networking.redis_security_group_id
+  tags               = local.common_tags
+}
