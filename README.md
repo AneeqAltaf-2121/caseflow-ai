@@ -378,6 +378,23 @@ docker compose down          # stop everything
 docker compose down -v       # also delete the Postgres/Redis/storage volumes
 ```
 
+### Demo data
+
+Once the stack above is running, `scripts/seed_demo.py` populates it
+through the same public API the frontend uses — a demo user, a project
+with a sample contract uploaded and ingested, a chat conversation with
+grounded answers, a flagged human review, an evaluation run, and a
+generated report — so there's something to explore immediately instead
+of an empty dashboard:
+
+```bash
+python scripts/seed_demo.py
+```
+
+Log in at http://localhost:3000/login as `demo@caseflow.example` (mock
+OAuth) to see it. Safe to run more than once — it reuses the existing
+demo project and document rather than duplicating them.
+
 ---
 
 ## Environment Configuration
