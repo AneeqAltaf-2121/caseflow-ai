@@ -1,0 +1,7 @@
+# Copy to terraform.tfvars (git-ignored) and adjust before ever running
+# this against a real AWS account. Every value below is optional —
+# variables.tf's defaults already match a reasonable dev setup.
+
+aws_region   = "us-east-1"
+project_name = "caseflow-ai"
+environment  = "dev"
