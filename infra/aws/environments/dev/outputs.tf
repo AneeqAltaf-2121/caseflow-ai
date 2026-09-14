@@ -29,3 +29,7 @@ output "redis_endpoint" {
 output "documents_bucket_name" {
   value = module.s3.bucket_name
 }
+
+output "ecs_cluster_name" {
+  value = module.ecs.cluster_name
+}

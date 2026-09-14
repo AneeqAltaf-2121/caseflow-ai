@@ -57,3 +57,22 @@ module "s3" {
   name_prefix = local.name_prefix
   tags        = local.common_tags
 }
+
+module "iam" {
+  source = "../../modules/iam"
+
+  name_prefix          = local.name_prefix
+  documents_bucket_arn = module.s3.bucket_arn
+  tags                 = local.common_tags
+}
+
+module "ecs" {
+  source = "../../modules/ecs"
+
+  name_prefix             = local.name_prefix
+  private_subnet_ids      = module.networking.private_subnet_ids
+  security_group_id       = module.networking.ecs_security_group_id
+  task_execution_role_arn = module.iam.task_execution_role_arn
+  task_role_arn           = module.iam.task_role_arn
+  tags                    = local.common_tags
+}
