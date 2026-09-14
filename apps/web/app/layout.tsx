@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AuthProvider } from "@/lib/auth-context";
 import "./globals.css";
@@ -18,7 +19,15 @@ export const metadata: Metadata = {
   description: "AI research and document intelligence platform.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+// A plain, explicit prop type rather than Next.js's generated
+// `LayoutProps<"/">` ambient type — that type only exists after a
+// build has run once (`.next/types/`), so `tsc --noEmit` on a clean
+// checkout (no prior build — exactly what CI does) fails with
+// "Cannot find name 'LayoutProps'" before ever reaching `next build`,
+// which is what actually generates it. `{ children: ReactNode }` is
+// the standard App Router root layout signature and needs nothing
+// generated.
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
       lang="en"
