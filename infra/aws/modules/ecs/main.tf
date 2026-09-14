@@ -66,16 +66,26 @@ resource "aws_ecs_task_definition" "api" {
 }
 
 resource "aws_ecs_service" "api" {
-  name            = "${var.name_prefix}-api"
-  cluster         = aws_ecs_cluster.this.id
-  task_definition = aws_ecs_task_definition.api.arn
-  desired_count   = var.api_desired_count
-  launch_type     = "FARGATE"
+  name                              = "${var.name_prefix}-api"
+  cluster                           = aws_ecs_cluster.this.id
+  task_definition                   = aws_ecs_task_definition.api.arn
+  desired_count                     = var.api_desired_count
+  launch_type                       = "FARGATE"
+  health_check_grace_period_seconds = var.api_target_group_arn == null ? null : var.health_check_grace_period_seconds
 
   network_configuration {
     subnets          = var.private_subnet_ids
     security_groups  = [var.security_group_id]
     assign_public_ip = false
+  }
+
+  dynamic "load_balancer" {
+    for_each = var.api_target_group_arn == null ? [] : [var.api_target_group_arn]
+    content {
+      target_group_arn = load_balancer.value
+      container_name   = "api"
+      container_port   = var.api_port
+    }
   }
 
   tags = var.tags
@@ -162,16 +172,26 @@ resource "aws_ecs_task_definition" "web" {
 }
 
 resource "aws_ecs_service" "web" {
-  name            = "${var.name_prefix}-web"
-  cluster         = aws_ecs_cluster.this.id
-  task_definition = aws_ecs_task_definition.web.arn
-  desired_count   = var.web_desired_count
-  launch_type     = "FARGATE"
+  name                              = "${var.name_prefix}-web"
+  cluster                           = aws_ecs_cluster.this.id
+  task_definition                   = aws_ecs_task_definition.web.arn
+  desired_count                     = var.web_desired_count
+  launch_type                       = "FARGATE"
+  health_check_grace_period_seconds = var.web_target_group_arn == null ? null : var.health_check_grace_period_seconds
 
   network_configuration {
     subnets          = var.private_subnet_ids
     security_groups  = [var.security_group_id]
     assign_public_ip = false
+  }
+
+  dynamic "load_balancer" {
+    for_each = var.web_target_group_arn == null ? [] : [var.web_target_group_arn]
+    content {
+      target_group_arn = load_balancer.value
+      container_name   = "web"
+      container_port   = var.web_port
+    }
   }
 
   tags = var.tags
