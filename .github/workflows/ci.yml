@@ -5,7 +5,9 @@ name: CI
 # typecheck, build), and a Docker build of both images — the same
 # checks this project's own development process has run before every
 # phase's commit throughout, now enforced automatically instead of by
-# hand.
+# hand. Phase 53 added the terraform job: `fmt -check` and `validate`
+# against infra/aws/environments/dev, run the same way every IaC phase
+# (45-52) was verified locally.
 
 on:
   push:
@@ -129,6 +131,32 @@ jobs:
       - name: Validate docker-compose.yml
         run: docker compose config --quiet
 
+  terraform:
+    name: Terraform (fmt, validate)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/aws/environments/dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      # No backend is configured (see versions.tf) and no live AWS
+      # environment exists, so init only needs to resolve providers —
+      # -backend=false skips a state backend Phase 44 deliberately
+      # never set up.
+      - name: terraform init
+        run: terraform init -backend=false
+
+      - name: terraform fmt -check
+        run: terraform fmt -check -recursive ..
+
+      - name: terraform validate
+        run: terraform validate
+
   e2e:
     name: End-to-end (Playwright over Docker Compose)
     runs-on: ubuntu-latest
@@ -183,7 +211,7 @@ jobs:
   all-checks:
     name: All checks passed
     runs-on: ubuntu-latest
-    needs: [backend, frontend, docker, e2e]
+    needs: [backend, frontend, docker, terraform, e2e]
     if: always()
     steps:
       - name: Fail if any required job failed
