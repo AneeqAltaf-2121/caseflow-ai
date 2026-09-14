@@ -31,7 +31,14 @@ def test_workflow_runs_on_push_to_main_and_every_pull_request() -> None:
 
 def test_workflow_has_every_required_job() -> None:
     workflow = _workflow()
-    assert set(workflow["jobs"]) == {"backend", "frontend", "docker", "e2e", "all-checks"}
+    assert set(workflow["jobs"]) == {
+        "backend",
+        "frontend",
+        "docker",
+        "terraform",
+        "e2e",
+        "all-checks",
+    }
 
 
 def test_backend_job_covers_lint_typecheck_and_both_python_packages_tests() -> None:
@@ -71,10 +78,29 @@ def test_e2e_job_depends_on_the_other_three_jobs() -> None:
     assert set(needs) == {"backend", "frontend", "docker"}
 
 
+def test_terraform_job_runs_fmt_check_and_validate_against_the_dev_environment() -> None:
+    workflow = _workflow()
+    terraform_job = workflow["jobs"]["terraform"]
+    assert terraform_job["defaults"]["run"]["working-directory"] == "infra/aws/environments/dev"
+    steps = terraform_job["steps"]
+    run_steps = {step.get("name", ""): step.get("run", "") for step in steps}
+    assert "terraform init -backend=false" in run_steps["terraform init"]
+    assert "terraform fmt -check -recursive .." in run_steps["terraform fmt -check"]
+    assert "terraform validate" in run_steps["terraform validate"]
+    uses = [step.get("uses", "") for step in steps]
+    assert any(u.startswith("hashicorp/setup-terraform@") for u in uses)
+
+
 def test_all_checks_job_fails_if_any_dependency_failed() -> None:
     workflow = _workflow()
     all_checks = workflow["jobs"]["all-checks"]
-    assert set(all_checks["needs"]) == {"backend", "frontend", "docker", "e2e"}
+    assert set(all_checks["needs"]) == {
+        "backend",
+        "frontend",
+        "docker",
+        "terraform",
+        "e2e",
+    }
     assert all_checks["if"] == "always()"
     run_step = all_checks["steps"][0]["run"]
     assert "failure" in run_step
