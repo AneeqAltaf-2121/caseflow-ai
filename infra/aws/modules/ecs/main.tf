@@ -1,9 +1,10 @@
 # Phase 49: ECS/Fargate cluster running the three application services.
 # api and worker share one image (the api Dockerfile from Phase 39) and
 # differ only in the container command; web gets its own image. Load
-# balancer attachment (Phase 50) and real secrets (Phase 51) are wired
-# in on top of this in later phases rather than here, so each phase
-# stays independently reviewable.
+# balancer attachment (Phase 50) and Secrets Manager injection (Phase 51,
+# via the nullable api_secrets/target-group-arn variables) were added on
+# top of this base module in their own phases rather than here, so each
+# phase stays independently reviewable.
 
 resource "aws_ecs_cluster" "this" {
   name = "${var.name_prefix}-cluster"
@@ -51,6 +52,7 @@ resource "aws_ecs_task_definition" "api" {
       image        = var.api_image
       essential    = true
       portMappings = [{ containerPort = var.api_port, protocol = "tcp" }]
+      secrets      = var.api_secrets
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -110,6 +112,7 @@ resource "aws_ecs_task_definition" "worker" {
       image     = var.api_image
       essential = true
       command   = var.worker_command
+      secrets   = var.api_secrets
       logConfiguration = {
         logDriver = "awslogs"
         options = {

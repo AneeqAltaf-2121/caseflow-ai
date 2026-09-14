@@ -97,6 +97,18 @@ def test_api_and_web_services_optionally_attach_to_alb_target_groups() -> None:
     assert 'dynamic "load_balancer"' not in worker_service
 
 
+def test_api_and_worker_containers_accept_secrets_manager_injected_env_vars() -> None:
+    content = _main_tf()
+    api_block = content.split('resource "aws_ecs_task_definition" "api"')[1].split(
+        'resource "aws_ecs_service" "api"'
+    )[0]
+    worker_block = content.split('resource "aws_ecs_task_definition" "worker"')[1].split(
+        'resource "aws_ecs_service" "worker"'
+    )[0]
+    assert "secrets      = var.api_secrets" in api_block
+    assert "secrets   = var.api_secrets" in worker_block
+
+
 def test_ecs_module_is_wired_into_the_dev_environment_with_iam_roles() -> None:
     main_tf = (REPO_ROOT / "infra" / "aws" / "environments" / "dev" / "main.tf").read_text()
     assert 'module "ecs"' in main_tf
