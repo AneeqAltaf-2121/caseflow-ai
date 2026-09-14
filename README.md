@@ -6,7 +6,7 @@
 
 The project is built as a production-oriented AI platform rather than a standalone "chat with documents" demo. Its architecture is organized around multi-user workspaces, asynchronous document processing, retrieval-augmented generation (RAG), AI evaluation, observability, and reproducible model experimentation.
 
-> **Status:** Feature-complete. Every layer described below — auth, document ingestion, hybrid RAG, evaluation, human review, observability, the frontend, Docker, CI, and AWS infrastructure-as-code — is implemented and tested. See [Current Development Status](#current-development-status) for the phase-by-phase history and [Roadmap](#roadmap) for what's left before v1.0.0.
+> **Status:** v1.0.0. Every layer described below — auth, document ingestion, hybrid RAG, evaluation, human review, observability, the frontend, Docker, CI, and AWS infrastructure-as-code — is implemented and tested. See [Current Development Status](#current-development-status) for what shipped and [Roadmap](#roadmap) for the full milestone history.
 
 ---
 
@@ -227,11 +227,7 @@ CaseFlow AI was built incrementally, each layer tested before the next was intro
 
 **Infrastructure as code** — Terraform for the full target AWS architecture (networking, RDS, ElastiCache, S3, IAM, ECS/Fargate, ALB, Secrets Manager, CloudWatch alarms) — validated (`fmt`/`validate` in CI) but never deployed; see [Security](#security) and `docs/deployment.md`.
 
-**Polish & tooling** — frontend UX polish, a demo dataset seeder (`scripts/seed_demo.py`), a performance benchmarking harness (`scripts/benchmark.py`), and this documentation pass.
-
-### Remaining before v1.0.0
-
-- Final portfolio release: a full test-suite run across both Python packages and the frontend, a `v1.0.0` git tag, and a GitHub release.
+**Polish & tooling** — frontend UX polish, a demo dataset seeder (`scripts/seed_demo.py`), a performance benchmarking harness (`scripts/benchmark.py`), a full documentation pass, and the `v1.0.0` release itself: a full test-suite run across both Python packages, the frontend, Terraform, and end-to-end, then a tagged GitHub release.
 
 ---
 
@@ -510,13 +506,13 @@ Production observability               ✅
         ↓
 AWS infrastructure as code             ✅ (validated, not deployed)
         ↓
-v1.0.0 release                         ← next
+v1.0.0 release                         ✅
 ```
 
 ---
 
 ## Project Status
 
-✅ **CaseFlow AI is feature-complete and preparing for its v1.0.0 release.**
+✅ **CaseFlow AI has reached v1.0.0.**
 
-Every capability described above — auth, document intelligence, grounded RAG, AI evaluation, human review, observability, the frontend, Docker, CI, and AWS infrastructure-as-code — is implemented, tested, and merged. What remains is the final release phase: one more full test-suite run, a `v1.0.0` git tag, and a GitHub release.
+Every capability described above — auth, document intelligence, grounded RAG, AI evaluation, human review, observability, the frontend, Docker, CI, and AWS infrastructure-as-code — is implemented, tested, and merged.

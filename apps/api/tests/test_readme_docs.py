@@ -20,7 +20,7 @@ def test_readme_no_longer_claims_only_phases_0_to_3_are_done() -> None:
     assert "currently under development" not in content.lower()
     assert "current focus is authentication and authorization" not in content.lower()
     assert "12 tests passing" not in content
-    assert "feature-complete" in content.lower()
+    assert "v1.0.0" in content
 
 
 def test_readme_does_not_describe_rag_or_evaluation_as_merely_planned() -> None:
