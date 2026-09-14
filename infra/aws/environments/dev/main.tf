@@ -22,7 +22,7 @@ locals {
 #   Phase 47 -> module "redis"
 #   Phase 48 -> module "s3"
 #   Phase 49 -> module "ecs" (+ module "iam" for task roles)
-#   Phase 50 -> load balancer resources (folded into "ecs" or its own "alb" module)
+#   Phase 50 -> module "alb" (ecs services attach to its target groups)
 #   Phase 51 -> module "secrets"
 #   Phase 52 -> module "observability"
 
@@ -66,6 +66,16 @@ module "iam" {
   tags                 = local.common_tags
 }
 
+module "alb" {
+  source = "../../modules/alb"
+
+  name_prefix       = local.name_prefix
+  vpc_id            = module.networking.vpc_id
+  public_subnet_ids = module.networking.public_subnet_ids
+  security_group_id = module.networking.alb_security_group_id
+  tags              = local.common_tags
+}
+
 module "ecs" {
   source = "../../modules/ecs"
 
@@ -74,5 +84,7 @@ module "ecs" {
   security_group_id       = module.networking.ecs_security_group_id
   task_execution_role_arn = module.iam.task_execution_role_arn
   task_role_arn           = module.iam.task_role_arn
+  api_target_group_arn    = module.alb.api_target_group_arn
+  web_target_group_arn    = module.alb.web_target_group_arn
   tags                    = local.common_tags
 }

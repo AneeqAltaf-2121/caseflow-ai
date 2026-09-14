@@ -6,6 +6,7 @@ three services, task roles, container logs), since `validate` alone
 only proves the HCL parses.
 """
 
+import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -72,9 +73,28 @@ def test_every_task_definition_ships_logs_to_its_own_log_group() -> None:
 def test_tasks_run_on_fargate_in_private_subnets_with_no_public_ip() -> None:
     content = _main_tf()
     assert content.count('requires_compatibilities = ["FARGATE"]') == 3
-    assert content.count('launch_type     = "FARGATE"') == 3
+    assert len(re.findall(r'launch_type\s+=\s+"FARGATE"', content)) == 3
     assert content.count("assign_public_ip = false") == 3
-    assert content.count("subnets          = var.private_subnet_ids") == 3
+    assert len(re.findall(r"subnets\s+=\s+var\.private_subnet_ids", content)) == 3
+
+
+def test_api_and_web_services_optionally_attach_to_alb_target_groups() -> None:
+    content = _main_tf()
+    api_service = content.split('resource "aws_ecs_service" "api"')[1].split(
+        'resource "aws_ecs_task_definition" "worker"'
+    )[0]
+    web_service = content.split('resource "aws_ecs_service" "web"')[1]
+
+    for block, container in ((api_service, "api"), (web_service, "web")):
+        assert 'dynamic "load_balancer"' in block
+        assert f'container_name   = "{container}"' in block
+        assert "health_check_grace_period_seconds" in block
+
+    # worker has no HTTP port, so it never attaches to a load balancer.
+    worker_service = content.split('resource "aws_ecs_service" "worker"')[1].split(
+        'resource "aws_ecs_task_definition" "web"'
+    )[0]
+    assert 'dynamic "load_balancer"' not in worker_service
 
 
 def test_ecs_module_is_wired_into_the_dev_environment_with_iam_roles() -> None:

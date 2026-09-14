@@ -21,6 +21,24 @@ variable "task_role_arn" {
   type = string
 }
 
+variable "api_target_group_arn" {
+  description = "ALB target group the api service registers its tasks with (Phase 50). Null skips ALB attachment."
+  type        = string
+  default     = null
+}
+
+variable "web_target_group_arn" {
+  description = "ALB target group the web service registers its tasks with (Phase 50). Null skips ALB attachment."
+  type        = string
+  default     = null
+}
+
+variable "health_check_grace_period_seconds" {
+  description = "Grace period before the ECS deployment considers a slow-to-start ALB-attached task unhealthy."
+  type        = number
+  default     = 60
+}
+
 variable "api_image" {
   description = "Container image URI for the api and worker services (they share one image, differing only by command — the api Dockerfile from Phase 39)."
   type        = string
