@@ -38,12 +38,18 @@ export default function DocumentsPage({ params }: { params: Promise<{ id: string
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const hasPendingDocuments = useRef(false);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      setDocuments(await api.listDocuments(id));
+      const fetched = await api.listDocuments(id);
+      setDocuments(fetched);
+      hasPendingDocuments.current = fetched.some(
+        (doc) => doc.status === "uploaded" || doc.status === "processing",
+      );
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load documents.");
     }
@@ -51,6 +57,18 @@ export default function DocumentsPage({ params }: { params: Promise<{ id: string
 
   useEffect(() => {
     void Promise.resolve().then(load);
+  }, [load]);
+
+  // Ingestion runs in a background worker, so a freshly uploaded
+  // document sits at "uploaded"/"processing" until that job finishes.
+  // Poll while any document is still in flight so status updates (and
+  // the eventual "ready"/"failed" outcome) show up without a manual
+  // page refresh; the interval is a no-op once nothing is pending.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (hasPendingDocuments.current) void load();
+    }, 3000);
+    return () => clearInterval(interval);
   }, [load]);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -70,6 +88,7 @@ export default function DocumentsPage({ params }: { params: Promise<{ id: string
   }
 
   async function handleDownload(doc: ProjectDocument) {
+    setDownloadError(null);
     try {
       const token = getAccessToken();
       const response = await fetch(`${API_URL}/projects/${id}/documents/${doc.id}/download`, {
@@ -84,7 +103,7 @@ export default function DocumentsPage({ params }: { params: Promise<{ id: string
       link.click();
       window.URL.revokeObjectURL(url);
     } catch {
-      alert("Failed to download document.");
+      setDownloadError(`Failed to download "${doc.filename}".`);
     }
   }
 
@@ -111,6 +130,9 @@ export default function DocumentsPage({ params }: { params: Promise<{ id: string
         </label>
       </div>
       {uploadError && <p className="text-sm text-red-600 dark:text-red-400">{uploadError}</p>}
+      {downloadError && (
+        <p className="text-sm text-red-600 dark:text-red-400">{downloadError}</p>
+      )}
 
       {error && <ErrorState message={error} onRetry={load} />}
       {!error && documents === null && <SkeletonList rows={3} />}

@@ -37,13 +37,11 @@ test("login, upload a document, ask a question, and open its citation", async ({
   await page.getByLabel("Upload document").setInputFiles(SAMPLE_PDF);
   await expect(page.getByText("sample-contract.pdf")).toBeVisible();
 
-  // --- Wait for background ingestion to finish (no live-polling on this
-  // page — see apps/web/app/(app)/projects/[id]/documents/page.tsx —
-  // so the test itself reloads until the status badge reads "ready"). ---
-  await expect(async () => {
-    await page.reload();
-    await expect(page.getByText("ready", { exact: true })).toBeVisible();
-  }).toPass({ timeout: 45_000, intervals: [1000, 2000, 3000] });
+  // --- Wait for background ingestion to finish. The documents page
+  // polls while anything is still "uploaded"/"processing" (Phase 55),
+  // so the status badge flips to "ready" on its own — no manual
+  // page.reload() needed here. ---
+  await expect(page.getByText("ready", { exact: true })).toBeVisible({ timeout: 45_000 });
 
   // --- Ask a grounded question ---
   await page.getByRole("link", { name: "Chat" }).click();
